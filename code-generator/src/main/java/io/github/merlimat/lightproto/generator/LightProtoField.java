@@ -30,6 +30,9 @@ public abstract class LightProtoField {
     }
 
     public static LightProtoField create(ProtoFieldDescriptor field, int index) {
+        if (field.isMapField()) {
+            return new LightProtoMapField(field, index);
+        }
         if (field.isRepeated()) {
             if (field.isMessageField()) {
                 return new LightProtoRepeatedMessageField(field, index);

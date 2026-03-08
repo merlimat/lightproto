@@ -52,6 +52,9 @@ public class ProtoFieldDescriptor {
     private final List<String> docs;
     private final int oneofIndex;    // Index into message's oneof list, or -1 if not in a oneof
     private final String oneofName;  // Name of the containing oneof, or null
+    private final boolean mapField;
+    private final ProtoFieldDescriptor mapKeyField;
+    private final ProtoFieldDescriptor mapValueField;
 
     public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
                                 Label label, boolean packed,
@@ -66,6 +69,18 @@ public class ProtoFieldDescriptor {
                                 boolean defaultValueSet, String defaultValue,
                                 String defaultValueAsString, List<String> docs,
                                 int oneofIndex, String oneofName) {
+        this(name, number, protoType, javaType, label, packed,
+                defaultValueSet, defaultValue, defaultValueAsString, docs,
+                oneofIndex, oneofName, false, null, null);
+    }
+
+    public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
+                                Label label, boolean packed,
+                                boolean defaultValueSet, String defaultValue,
+                                String defaultValueAsString, List<String> docs,
+                                int oneofIndex, String oneofName,
+                                boolean mapField, ProtoFieldDescriptor mapKeyField,
+                                ProtoFieldDescriptor mapValueField) {
         this.name = name;
         this.number = number;
         this.protoType = protoType;
@@ -78,6 +93,9 @@ public class ProtoFieldDescriptor {
         this.docs = docs != null ? docs : Collections.emptyList();
         this.oneofIndex = oneofIndex;
         this.oneofName = oneofName;
+        this.mapField = mapField;
+        this.mapKeyField = mapKeyField;
+        this.mapValueField = mapValueField;
     }
 
     public String getName() {
@@ -170,5 +188,17 @@ public class ProtoFieldDescriptor {
 
     public boolean isOneofMember() {
         return oneofIndex >= 0;
+    }
+
+    public boolean isMapField() {
+        return mapField;
+    }
+
+    public ProtoFieldDescriptor getMapKeyField() {
+        return mapKeyField;
+    }
+
+    public ProtoFieldDescriptor getMapValueField() {
+        return mapValueField;
     }
 }
