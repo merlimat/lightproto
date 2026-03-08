@@ -88,12 +88,15 @@ public abstract class LightProtoField {
         w.format("        private static final int %s = %d;\n", fieldNumber(), field.getNumber());
         w.format("        private static final int %s = (%s << LightProtoCodec.TAG_TYPE_BITS) | %s;\n", tagName(), fieldNumber(), typeTag());
         w.format("        private static final int %s_SIZE = LightProtoCodec.computeVarIntSize(%s);\n", tagName(), tagName());
-        if (!field.isRepeated() && !field.isOneofMember()) {
+        if (!field.isRepeated() && !field.isOneofMember() && !field.hasImplicitPresence()) {
             w.format("        private static final int %s = 1 << (%d %% 32);\n", fieldMask(), index);
         }
     }
 
     public void has(PrintWriter w) {
+        if (field.hasImplicitPresence()) {
+            return; // No has() for proto3 implicit presence fields
+        }
         w.format("        public boolean %s() {\n", Util.camelCase("has", field.getName()));
         if (field.isOneofMember()) {
             w.format("            return _%sCase == %s;\n", Util.camelCase(field.getOneofName()), fieldNumber());
@@ -112,8 +115,10 @@ public abstract class LightProtoField {
             w.format("                _%sCase = 0;\n", Util.camelCase(field.getOneofName()));
             clear(w);
             w.format("            }\n");
-        } else {
+        } else if (!field.hasImplicitPresence()) {
             w.format("            _bitField%d &= ~%s;\n", bitFieldIndex(), fieldMask());
+            clear(w);
+        } else {
             clear(w);
         }
         w.format("            return this;\n");
@@ -166,11 +171,36 @@ public abstract class LightProtoField {
     }
 
     protected void writeSetPresence(PrintWriter w) {
+        if (field.hasImplicitPresence()) {
+            return; // No presence tracking for proto3 implicit presence
+        }
         if (field.isOneofMember()) {
             w.format("    _%sCase = %s;\n", Util.camelCase(field.getOneofName()), fieldNumber());
         } else {
             w.format("    _bitField%d |= %s;\n", bitFieldIndex(), fieldMask());
         }
+    }
+
+    /**
+     * Returns the Java expression to guard serialization, or null if always serialized.
+     * For explicit presence: has() check. For implicit presence: non-default check.
+     */
+    public String serializeCondition() {
+        if (field.isRequired() || field.isRepeated()) {
+            return null;
+        }
+        if (field.hasImplicitPresence()) {
+            return nonDefaultCondition();
+        }
+        return Util.camelCase("has", field.getName()) + "()";
+    }
+
+    /**
+     * Returns the Java expression that is true when this field has a non-default value.
+     * Only called for proto3 implicit presence fields.
+     */
+    protected String nonDefaultCondition() {
+        throw new UnsupportedOperationException("nonDefaultCondition not implemented for " + getClass().getSimpleName());
     }
 
     public boolean isOneofMember() {

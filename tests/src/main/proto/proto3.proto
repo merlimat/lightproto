@@ -1,0 +1,47 @@
+syntax = "proto3";
+package io.github.merlimat.lightproto.tests;
+
+option java_outer_classname = "Proto3Protos";
+
+enum Proto3Enum {
+    DEFAULT = 0;
+    VALUE_A = 1;
+    VALUE_B = 2;
+}
+
+message Proto3Nested {
+    string label = 1;
+    int32 value = 2;
+}
+
+message Proto3Message {
+    // Implicit presence (no has(), serialize only when non-default)
+    int32 int_field = 1;
+    int64 long_field = 2;
+    float float_field = 3;
+    double double_field = 4;
+    bool bool_field = 5;
+    string string_field = 6;
+    bytes bytes_field = 7;
+    Proto3Enum enum_field = 8;
+
+    // Explicit presence (has() generated)
+    optional int32 opt_int = 9;
+    optional string opt_string = 10;
+
+    // Message field (always explicit presence in proto3)
+    Proto3Nested nested = 11;
+
+    // Oneof (explicit presence)
+    oneof test_oneof {
+        string oneof_string = 12;
+        int32 oneof_int = 13;
+    }
+
+    // Repeated (packed by default in proto3)
+    repeated int32 packed_ints = 14;
+    repeated Proto3Enum packed_enums = 15;
+
+    // Map
+    map<string, int32> string_to_int = 16;
+}

@@ -114,7 +114,7 @@ public class LightProtoMessage {
                 if (field.isOneofMember()) {
                     w.format("                    _%sCase = %s;\n",
                             Util.camelCase(field.field.getOneofName()), field.fieldNumber());
-                } else {
+                } else if (!field.field.hasImplicitPresence()) {
                     w.format("                    _bitField%d |= %s;\n", field.bitFieldIndex(), field.fieldMask());
                 }
             }
@@ -170,6 +170,9 @@ public class LightProtoMessage {
         for (LightProtoField f : fields) {
             if (f.isRepeated()) {
                 f.copy(w);
+            } else if (f.field.hasImplicitPresence()) {
+                // Always copy for proto3 implicit presence — no has() to check
+                f.copy(w);
             } else {
                 w.format("    if (_other.%s()) {\n", Util.camelCase("has", f.ccName));
                 f.copy(w);
@@ -201,14 +204,13 @@ public class LightProtoMessage {
         w.format("            }\n");
         w.format("            _addr = _baseOffset + _writeIdx;\n");
         for (LightProtoField f : fields) {
-
-            if (f.isRequired() || f.isRepeated()) {
-                // If required, skip the has() check
-                f.serialize(w);
-            } else {
-                w.format("            if (%s()) {\n", Util.camelCase("has", f.field.getName()));
+            String condition = f.serializeCondition();
+            if (condition != null) {
+                w.format("            if (%s) {\n", condition);
                 f.serialize(w);
                 w.format("            }\n");
+            } else {
+                f.serialize(w);
             }
         }
 
@@ -226,12 +228,13 @@ public class LightProtoMessage {
 
         w.format("    int _size = 0;\n");
         fields.forEach(field -> {
-            if (field.isRequired() || field.isRepeated()) {
-                field.serializedSize(w);
-            } else {
-                w.format("        if (%s()) {\n", Util.camelCase("has", field.field.getName()));
+            String condition = field.serializeCondition();
+            if (condition != null) {
+                w.format("        if (%s) {\n", condition);
                 field.serializedSize(w);
                 w.format("        }\n");
+            } else {
+                field.serializedSize(w);
             }
         });
 

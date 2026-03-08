@@ -55,6 +55,8 @@ public class ProtoFieldDescriptor {
     private final boolean mapField;
     private final ProtoFieldDescriptor mapKeyField;
     private final ProtoFieldDescriptor mapValueField;
+    private final boolean proto3;
+    private final boolean proto3Optional;
 
     public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
                                 Label label, boolean packed,
@@ -81,6 +83,20 @@ public class ProtoFieldDescriptor {
                                 int oneofIndex, String oneofName,
                                 boolean mapField, ProtoFieldDescriptor mapKeyField,
                                 ProtoFieldDescriptor mapValueField) {
+        this(name, number, protoType, javaType, label, packed,
+                defaultValueSet, defaultValue, defaultValueAsString, docs,
+                oneofIndex, oneofName, mapField, mapKeyField, mapValueField,
+                false, false);
+    }
+
+    public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
+                                Label label, boolean packed,
+                                boolean defaultValueSet, String defaultValue,
+                                String defaultValueAsString, List<String> docs,
+                                int oneofIndex, String oneofName,
+                                boolean mapField, ProtoFieldDescriptor mapKeyField,
+                                ProtoFieldDescriptor mapValueField,
+                                boolean proto3, boolean proto3Optional) {
         this.name = name;
         this.number = number;
         this.protoType = protoType;
@@ -96,6 +112,8 @@ public class ProtoFieldDescriptor {
         this.mapField = mapField;
         this.mapKeyField = mapKeyField;
         this.mapValueField = mapValueField;
+        this.proto3 = proto3;
+        this.proto3Optional = proto3Optional;
     }
 
     public String getName() {
@@ -200,5 +218,14 @@ public class ProtoFieldDescriptor {
 
     public ProtoFieldDescriptor getMapValueField() {
         return mapValueField;
+    }
+
+    /**
+     * Returns true if this field has implicit presence semantics (proto3 scalar without optional).
+     * Such fields have no has*() method and are only serialized when their value is non-default.
+     */
+    public boolean hasImplicitPresence() {
+        return proto3 && !proto3Optional && !isMessageField() && !isOneofMember()
+                && !isRepeated() && !isMapField();
     }
 }
