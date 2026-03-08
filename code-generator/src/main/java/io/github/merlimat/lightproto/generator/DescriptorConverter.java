@@ -25,6 +25,7 @@ import com.google.protobuf.DescriptorProtos.OneofDescriptorProto;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -100,7 +101,17 @@ public class DescriptorConverter {
                 .map(DescriptorConverter::convertEnum)
                 .collect(Collectors.toList());
 
+        // Detect map_entry synthetic messages
+        Map<String, DescriptorProto> mapEntryTypes = new HashMap<>();
+        for (DescriptorProto nested : messageProto.getNestedTypeList()) {
+            if (nested.hasOptions() && nested.getOptions().getMapEntry()) {
+                mapEntryTypes.put(nested.getName(), nested);
+            }
+        }
+
+        // Filter out map_entry messages from nested messages
         List<ProtoMessageDescriptor> nestedMessages = messageProto.getNestedTypeList().stream()
+                .filter(nested -> !mapEntryTypes.containsKey(nested.getName()))
                 .map(DescriptorConverter::convertMessage)
                 .collect(Collectors.toList());
 
@@ -112,14 +123,15 @@ public class DescriptorConverter {
         }
 
         List<ProtoFieldDescriptor> fields = messageProto.getFieldList().stream()
-                .map(f -> convertField(f, oneofs))
+                .map(f -> convertField(f, oneofs, mapEntryTypes))
                 .collect(Collectors.toList());
 
         return new ProtoMessageDescriptor(messageProto.getName(), fields, nestedMessages, nestedEnums, oneofs);
     }
 
     private static ProtoFieldDescriptor convertField(FieldDescriptorProto fieldProto,
-                                                        List<ProtoOneofDescriptor> oneofs) {
+                                                        List<ProtoOneofDescriptor> oneofs,
+                                                        Map<String, DescriptorProto> mapEntryTypes) {
         String name = fieldProto.getName();
         int number = fieldProto.getNumber();
 
@@ -191,8 +203,47 @@ public class DescriptorConverter {
             }
         }
 
+        // Check for map field
+        boolean isMapField = false;
+        ProtoFieldDescriptor mapKeyField = null;
+        ProtoFieldDescriptor mapValueField = null;
+        if (label == ProtoFieldDescriptor.Label.REPEATED
+                && type == FieldDescriptorProto.Type.TYPE_MESSAGE) {
+            String entryTypeName = resolveTypeName(fieldProto.getTypeName());
+            DescriptorProto entryProto = mapEntryTypes.get(entryTypeName);
+            if (entryProto != null) {
+                isMapField = true;
+                for (FieldDescriptorProto entryField : entryProto.getFieldList()) {
+                    ProtoFieldDescriptor entryFieldDesc = convertSimpleField(entryField);
+                    if (entryField.getNumber() == 1) {
+                        mapKeyField = entryFieldDesc;
+                    } else if (entryField.getNumber() == 2) {
+                        mapValueField = entryFieldDesc;
+                    }
+                }
+            }
+        }
+
         return new ProtoFieldDescriptor(name, number, protoType, javaType, label, packed,
-                defaultValueSet, defaultValue, defaultValueAsString, docs, oneofIndex, oneofName);
+                defaultValueSet, defaultValue, defaultValueAsString, docs,
+                oneofIndex, oneofName, isMapField, mapKeyField, mapValueField);
+    }
+
+    /**
+     * Converts a field descriptor to a simple ProtoFieldDescriptor (used for map key/value fields).
+     */
+    private static ProtoFieldDescriptor convertSimpleField(FieldDescriptorProto fieldProto) {
+        FieldDescriptorProto.Type type = fieldProto.getType();
+        String protoType = PROTO_TYPE_NAMES.get(type);
+        String javaType;
+        if (type == FieldDescriptorProto.Type.TYPE_MESSAGE || type == FieldDescriptorProto.Type.TYPE_ENUM) {
+            javaType = resolveTypeName(fieldProto.getTypeName());
+        } else {
+            javaType = JAVA_TYPE_NAMES.get(type);
+        }
+        return new ProtoFieldDescriptor(fieldProto.getName(), fieldProto.getNumber(),
+                protoType, javaType, ProtoFieldDescriptor.Label.OPTIONAL, false,
+                false, null, null, Collections.emptyList());
     }
 
     private static ProtoEnumDescriptor convertEnum(EnumDescriptorProto enumProto) {

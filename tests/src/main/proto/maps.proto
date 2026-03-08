@@ -1,0 +1,19 @@
+syntax = "proto2";
+package io.github.merlimat.lightproto.tests;
+
+option java_outer_classname = "MapsProtos";
+
+message MapNestedValue {
+    optional int32 id = 1;
+    optional string name = 2;
+}
+
+message MapMessage {
+    map<string, int32> string_to_int = 1;
+    map<int32, string> int_to_string = 2;
+    map<string, MapNestedValue> string_to_msg = 3;
+    map<string, bytes> string_to_bytes = 4;
+    map<bool, string> bool_to_string = 5;
+    map<string, double> string_to_double = 6;
+    optional string name = 10;
+}
