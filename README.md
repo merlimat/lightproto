@@ -5,7 +5,7 @@ High-performance Protocol Buffers code generator for Java, optimized for seriali
 ## Features
 
 - **Fastest Java Protobuf SerDe** — Unsafe-based serialization bypasses Netty ByteBuf boundary checks
-- **100% wire-compatible** with proto2 definitions
+- **100% wire-compatible** with proto2 and proto3 definitions
 - **Zero-copy deserialization** using Netty `ByteBuf` (direct and heap memory)
 - **Zero heap allocations** — reusable mutable objects, no Builder pattern overhead
 - **Lazy string/bytes deserialization** — decoded only on access
@@ -59,6 +59,30 @@ parsed.parseFrom(buf, buf.readableBytes());
 md.clear();
 md.setProducerName("producer-2")...
 ```
+
+## Supported Features
+
+| Feature | proto2 | proto3 |
+|:---|:---:|:---:|
+| Scalar fields (int32, int64, uint32, uint64, sint32, sint64, fixed32, fixed64, sfixed32, sfixed64, float, double, bool) | ✅ | ✅ |
+| String fields | ✅ | ✅ |
+| Bytes fields | ✅ | ✅ |
+| Enum fields | ✅ | ✅ |
+| Nested messages | ✅ | ✅ |
+| `optional` fields (explicit presence) | ✅ | ✅ |
+| `required` fields | ✅ | — |
+| Implicit presence (no `has*()`, skip defaults) | — | ✅ |
+| `oneof` | ✅ | ✅ |
+| `repeated` fields | ✅ | ✅ |
+| `repeated` packed encoding | ✅ | ✅ (default) |
+| `map<K, V>` fields | ✅ | ✅ |
+| Nested enum / message definitions | ✅ | ✅ |
+| Default values | ✅ | — |
+| Multiple `.proto` files / `import` | ✅ | ✅ |
+| `service` / RPC definitions | ❌ | ❌ |
+| Extensions | ❌ | — |
+| `Any`, `Timestamp`, well-known types | ❌ | ❌ |
+| `group` (deprecated) | ❌ | — |
 
 ## Performance
 
