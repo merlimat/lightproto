@@ -56,7 +56,11 @@ public class LightProtoStringField extends LightProtoField {
     @Override
     public void getter(PrintWriter w) {
         w.format("public %s %s() {\n", field.getJavaType(), Util.camelCase("get", field.getName()));
-        if (!field.isDefaultValueSet()) {
+        if (field.hasImplicitPresence()) {
+            w.format("    if (_%sBufferLen < 0) {\n", ccName);
+            w.format("        return \"\";\n");
+            w.format("    }\n");
+        } else if (!field.isDefaultValueSet()) {
             w.format("    if (!%s()) {\n", Util.camelCase("has", ccName));
             w.format("        throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
             w.format("    }\n");
@@ -66,6 +70,11 @@ public class LightProtoStringField extends LightProtoField {
         w.format("    }\n");
         w.format("    return %s;\n", camelCase(field.getName()));
         w.format("}\n");
+    }
+
+    @Override
+    protected String nonDefaultCondition() {
+        return "_" + ccName + "BufferLen > 0";
     }
 
     @Override

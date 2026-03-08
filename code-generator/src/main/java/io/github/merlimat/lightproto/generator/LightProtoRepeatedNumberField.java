@@ -29,6 +29,14 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public String serializeCondition() {
+        if (field.isPacked()) {
+            return "_" + pluralName + "Count > 0";
+        }
+        return null;
+    }
+
+    @Override
     public void tags(PrintWriter w) {
         super.tags(w);
         int dataSize = LightProtoNumberField.fixedDataSize(field);

@@ -62,13 +62,20 @@ public class LightProtoBytesField extends LightProtoField {
     @Override
     public void getter(PrintWriter w) {
         w.format("public int %s() {\n", Util.camelCase("get", ccName, "size"));
-        w.format("    if (!%s()) {\n", Util.camelCase("has", ccName));
-        w.format("        throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
-        w.format("    }\n");
+        if (field.hasImplicitPresence()) {
+            w.format("    if (_%sLen < 0) { return 0; }\n", ccName);
+        } else {
+            w.format("    if (!%s()) {\n", Util.camelCase("has", ccName));
+            w.format("        throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
+            w.format("    }\n");
+        }
         w.format("    return _%sLen;\n", ccName);
         w.format("}\n");
 
         w.format("public byte[] %s() {\n", Util.camelCase("get", ccName));
+        if (field.hasImplicitPresence()) {
+            w.format("    if (_%sLen < 0) { return new byte[0]; }\n", ccName);
+        }
         w.format("    io.netty.buffer.ByteBuf _b = %s();\n", Util.camelCase("get", ccName, "slice"));
         w.format("    byte[] res = new byte[_b.readableBytes()];\n");
         w.format("    _b.getBytes(0, res);\n");
@@ -76,15 +83,24 @@ public class LightProtoBytesField extends LightProtoField {
         w.format("}\n");
 
         w.format("public io.netty.buffer.ByteBuf %s() {\n", Util.camelCase("get", ccName, "slice"));
-        w.format("    if (!%s()) {\n", Util.camelCase("has", ccName));
-        w.format("        throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
-        w.format("    }\n");
+        if (field.hasImplicitPresence()) {
+            w.format("    if (_%sLen < 0) { return io.netty.buffer.Unpooled.EMPTY_BUFFER; }\n", ccName);
+        } else {
+            w.format("    if (!%s()) {\n", Util.camelCase("has", ccName));
+            w.format("        throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
+            w.format("    }\n");
+        }
         w.format("    if (%s == null) {\n", ccName);
         w.format("        return _parsedBuffer.slice(_%sIdx, _%sLen);\n", ccName, ccName);
         w.format("    } else {\n");
         w.format("        return %s.slice(0, _%sLen);\n", ccName, ccName);
         w.format("    }\n");
         w.format("}\n");
+    }
+
+    @Override
+    protected String nonDefaultCondition() {
+        return "_" + ccName + "Len > 0";
     }
 
     @Override

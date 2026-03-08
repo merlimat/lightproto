@@ -26,8 +26,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -83,7 +85,7 @@ public class DescriptorConverter {
                 .collect(Collectors.toList());
 
         List<ProtoMessageDescriptor> messages = fileProto.getMessageTypeList().stream()
-                .map(DescriptorConverter::convertMessage)
+                .map(m -> convertMessage(m, syntax))
                 .collect(Collectors.toList());
 
         return new ProtoFileDescriptor(javaPackage, syntax, messages, enums);
@@ -96,7 +98,7 @@ public class DescriptorConverter {
         return fileProto.getPackage();
     }
 
-    private static ProtoMessageDescriptor convertMessage(DescriptorProto messageProto) {
+    private static ProtoMessageDescriptor convertMessage(DescriptorProto messageProto, String syntax) {
         List<ProtoEnumDescriptor> nestedEnums = messageProto.getEnumTypeList().stream()
                 .map(DescriptorConverter::convertEnum)
                 .collect(Collectors.toList());
@@ -112,26 +114,48 @@ public class DescriptorConverter {
         // Filter out map_entry messages from nested messages
         List<ProtoMessageDescriptor> nestedMessages = messageProto.getNestedTypeList().stream()
                 .filter(nested -> !mapEntryTypes.containsKey(nested.getName()))
-                .map(DescriptorConverter::convertMessage)
+                .map(m -> convertMessage(m, syntax))
                 .collect(Collectors.toList());
 
-        // Build oneof descriptors
+        // Identify synthetic oneofs (created by protoc for proto3 optional fields)
+        Set<Integer> syntheticOneofIndices = new HashSet<>();
+        for (FieldDescriptorProto f : messageProto.getFieldList()) {
+            if (f.getProto3Optional() && f.hasOneofIndex()) {
+                syntheticOneofIndices.add(f.getOneofIndex());
+            }
+        }
+
+        // Build oneof descriptors, filtering out synthetic oneofs
         List<ProtoOneofDescriptor> oneofs = new ArrayList<>();
         for (int i = 0; i < messageProto.getOneofDeclCount(); i++) {
+            if (syntheticOneofIndices.contains(i)) {
+                continue;
+            }
             OneofDescriptorProto oneofProto = messageProto.getOneofDecl(i);
             oneofs.add(new ProtoOneofDescriptor(oneofProto.getName(), i));
         }
 
         List<ProtoFieldDescriptor> fields = messageProto.getFieldList().stream()
-                .map(f -> convertField(f, oneofs, mapEntryTypes))
+                .map(f -> convertField(f, oneofs, mapEntryTypes, syntax, syntheticOneofIndices))
                 .collect(Collectors.toList());
 
         return new ProtoMessageDescriptor(messageProto.getName(), fields, nestedMessages, nestedEnums, oneofs);
     }
 
+    private static final Set<String> PACKABLE_PROTO_TYPES = Set.of(
+            "int32", "int64", "uint32", "uint64", "sint32", "sint64",
+            "fixed32", "fixed64", "sfixed32", "sfixed64", "float", "double",
+            "bool", "enum"
+    );
+
     private static ProtoFieldDescriptor convertField(FieldDescriptorProto fieldProto,
                                                         List<ProtoOneofDescriptor> oneofs,
-                                                        Map<String, DescriptorProto> mapEntryTypes) {
+                                                        Map<String, DescriptorProto> mapEntryTypes,
+                                                        String syntax,
+                                                        Set<Integer> syntheticOneofIndices) {
+        boolean proto3 = "proto3".equals(syntax);
+        boolean proto3Optional = fieldProto.getProto3Optional();
+
         String name = fieldProto.getName();
         int number = fieldProto.getNumber();
 
@@ -158,8 +182,18 @@ public class DescriptorConverter {
                 break;
         }
 
-        boolean packed = fieldProto.hasOptions() && fieldProto.getOptions().hasPacked()
-                && fieldProto.getOptions().getPacked();
+        // Packed encoding: proto3 defaults to packed for packable repeated fields
+        boolean packed;
+        if (proto3) {
+            boolean packable = label == ProtoFieldDescriptor.Label.REPEATED
+                    && PACKABLE_PROTO_TYPES.contains(protoType);
+            boolean explicitlyUnpacked = fieldProto.hasOptions() && fieldProto.getOptions().hasPacked()
+                    && !fieldProto.getOptions().getPacked();
+            packed = packable && !explicitlyUnpacked;
+        } else {
+            packed = fieldProto.hasOptions() && fieldProto.getOptions().hasPacked()
+                    && fieldProto.getOptions().getPacked();
+        }
 
         boolean defaultValueSet = fieldProto.hasDefaultValue();
         String defaultValue = null;
@@ -193,13 +227,16 @@ public class DescriptorConverter {
         // No docs available from binary descriptor sets
         List<String> docs = Collections.emptyList();
 
-        // Oneof membership
+        // Oneof membership — skip synthetic oneofs (created for proto3 optional)
         int oneofIndex = -1;
         String oneofName = null;
-        if (fieldProto.hasOneofIndex()) {
+        if (fieldProto.hasOneofIndex() && !syntheticOneofIndices.contains(fieldProto.getOneofIndex())) {
             oneofIndex = fieldProto.getOneofIndex();
-            if (oneofIndex >= 0 && oneofIndex < oneofs.size()) {
-                oneofName = oneofs.get(oneofIndex).getName();
+            for (ProtoOneofDescriptor oneof : oneofs) {
+                if (oneof.getIndex() == oneofIndex) {
+                    oneofName = oneof.getName();
+                    break;
+                }
             }
         }
 
@@ -226,7 +263,8 @@ public class DescriptorConverter {
 
         return new ProtoFieldDescriptor(name, number, protoType, javaType, label, packed,
                 defaultValueSet, defaultValue, defaultValueAsString, docs,
-                oneofIndex, oneofName, isMapField, mapKeyField, mapValueField);
+                oneofIndex, oneofName, isMapField, mapKeyField, mapValueField,
+                proto3, proto3Optional);
     }
 
     /**

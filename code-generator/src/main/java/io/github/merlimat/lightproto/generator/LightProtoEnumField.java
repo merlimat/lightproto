@@ -24,11 +24,46 @@ public class LightProtoEnumField extends LightProtoNumberField {
     }
 
     @Override
+    public void declaration(PrintWriter w) {
+        if (field.hasImplicitPresence()) {
+            w.format("private %s %s = %s.valueOf(0);\n", field.getJavaType(), ccName, field.getJavaType());
+        } else {
+            super.declaration(w);
+        }
+    }
+
+    @Override
+    public void getter(PrintWriter w) {
+        w.format("        public %s %s() {\n", field.getJavaType(), Util.camelCase("get", field.getName()));
+        if (!field.hasImplicitPresence() && !field.isDefaultValueSet()) {
+            w.format("            if (!%s()) {\n", Util.camelCase("has", ccName));
+            w.format("                throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
+            w.format("            }\n");
+        }
+        w.format("            return %s;\n", ccName);
+        w.format("        }\n");
+    }
+
+    @Override
+    public void clear(PrintWriter w) {
+        if (field.hasImplicitPresence()) {
+            w.format("%s = %s.valueOf(0);\n", ccName, field.getJavaType());
+        } else {
+            super.clear(w);
+        }
+    }
+
+    @Override
     public void parse(PrintWriter w) {
         w.format("%s _%s = %s;\n", field.getJavaType(), ccName, parseNumber(field));
         w.format("if (_%s != null) {\n", ccName);
         writeSetPresence(w);
         w.format("    %s = _%s;\n", ccName, ccName);
         w.format("}\n");
+    }
+
+    @Override
+    protected String nonDefaultCondition() {
+        return ccName + ".getValue() != 0";
     }
 }

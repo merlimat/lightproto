@@ -168,7 +168,7 @@ public class LightProtoNumberField extends LightProtoField {
 
     public void getter(PrintWriter w) {
         w.format("        public %s %s() {\n", field.getJavaType(), Util.camelCase("get", field.getName()));
-        if (!field.isDefaultValueSet()) {
+        if (!field.hasImplicitPresence() && !field.isDefaultValueSet()) {
             w.format("            if (!%s()) {\n", Util.camelCase("has", ccName));
             w.format("                throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
             w.format("            }\n");
@@ -216,7 +216,14 @@ public class LightProtoNumberField extends LightProtoField {
     public void clear(PrintWriter w) {
         if (field.isDefaultValueSet()) {
             w.format("%s = %s;\n", ccName, field.getDefaultValueAsString());
+        } else if (field.hasImplicitPresence()) {
+            w.format("%s = 0;\n", ccName);
         }
+    }
+
+    @Override
+    protected String nonDefaultCondition() {
+        return ccName + " != 0";
     }
 
     static int fixedDataSize(ProtoFieldDescriptor field) {

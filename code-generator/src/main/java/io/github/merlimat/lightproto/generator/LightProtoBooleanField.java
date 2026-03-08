@@ -26,12 +26,26 @@ public class LightProtoBooleanField extends LightProtoNumberField {
     @Override
     public void getter(PrintWriter w) {
         w.format("        public %s %s() {\n", field.getJavaType(), Util.camelCase("is", ccName));
-        if (!field.isDefaultValueSet()) {
+        if (!field.hasImplicitPresence() && !field.isDefaultValueSet()) {
             w.format("            if (!%s()) {\n", Util.camelCase("has", ccName));
             w.format("                throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
             w.format("            }\n");
         }
         w.format("            return %s;\n", ccName);
         w.format("        }\n");
+    }
+
+    @Override
+    public void clear(PrintWriter w) {
+        if (field.isDefaultValueSet()) {
+            w.format("%s = %s;\n", ccName, field.getDefaultValueAsString());
+        } else if (field.hasImplicitPresence()) {
+            w.format("%s = false;\n", ccName);
+        }
+    }
+
+    @Override
+    protected String nonDefaultCondition() {
+        return ccName;
     }
 }
