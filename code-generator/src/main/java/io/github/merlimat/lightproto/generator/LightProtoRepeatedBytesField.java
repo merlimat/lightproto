@@ -32,7 +32,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated<Fie
 
     @Override
     public void declaration(PrintWriter w) {
-        w.format("private java.util.List<LightProtoCodec.BytesHolder> %s = null;\n", pluralName);
+        w.format("private LightProtoCodec.BytesHolder[] %s = null;\n", pluralName);
         w.format("private int _%sCount = 0;\n", pluralName);
     }
 
@@ -54,7 +54,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated<Fie
         w.format("    if (idx < 0 || idx >= _%sCount) {\n", pluralName);
         w.format("        throw new IndexOutOfBoundsException(\"Index \" + idx + \" is out of the list size (\" + _%sCount + \") for field '%s'\");\n", pluralName, field.getName());
         w.format("    }\n");
-        w.format("    return %s.get(idx).len;\n", pluralName);
+        w.format("    return %s[idx].len;\n", pluralName);
         w.format("}\n");
 
 
@@ -69,7 +69,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated<Fie
         w.format("    if (idx < 0 || idx >= _%sCount) {\n", pluralName);
         w.format("        throw new IndexOutOfBoundsException(\"Index \" + idx + \" is out of the list size (\" + _%sCount + \") for field '%s'\");\n", pluralName, field.getName());
         w.format("    }\n");
-        w.format("    LightProtoCodec.BytesHolder _bh = %s.get(idx);\n", pluralName);
+        w.format("    LightProtoCodec.BytesHolder _bh = %s[idx];\n", pluralName);
         w.format("    if (_bh.b == null) {\n");
         w.format("        return _parsedBuffer.slice(_bh.idx, _bh.len);\n");
         w.format("    } else {\n");
@@ -81,7 +81,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated<Fie
     @Override
     public void serialize(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-        w.format("    LightProtoCodec.BytesHolder _bh = %s.get(i);\n", pluralName);
+        w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
         w.format("    %s;\n", writeTagExpr(tagName()));
         w.format("    LightProtoCodec.writeVarInt(_b, _bh.len);\n");
         w.format("    if (_bh.idx == -1) {\n");
@@ -99,9 +99,6 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated<Fie
         w.format("}\n");
 
         w.format("public void %s(io.netty.buffer.ByteBuf %s) {\n", Util.camelCase("add", singularName), singularName);
-        w.format("    if (%s == null) {\n", pluralName);
-        w.format("        %s = new java.util.ArrayList<LightProtoCodec.BytesHolder>();\n", pluralName);
-        w.format("    }\n");
         w.format("    LightProtoCodec.BytesHolder _bh = _%sBytesHolder();\n", Util.camelCase("new", singularName));
         w.format("    _cachedSize = -1;\n");
         w.format("    _bh.b = %s;\n", singularName);
@@ -112,14 +109,15 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated<Fie
 
         w.format("private LightProtoCodec.BytesHolder _%sBytesHolder() {\n", Util.camelCase("new", singularName));
         w.format("    if (%s == null) {\n", pluralName);
-        w.format("         %s = new java.util.ArrayList<LightProtoCodec.BytesHolder>();\n", pluralName);
+        w.format("         %s = new LightProtoCodec.BytesHolder[4];\n", pluralName);
         w.format("    }\n");
-        w.format("    LightProtoCodec.BytesHolder _bh;\n");
-        w.format("    if (%s.size() == _%sCount) {\n", pluralName, pluralName);
+        w.format("    if (%s.length == _%sCount) {\n", pluralName, pluralName);
+        w.format("        %s = java.util.Arrays.copyOf(%s, _%sCount * 2);\n", pluralName, pluralName, pluralName);
+        w.format("    }\n");
+        w.format("    LightProtoCodec.BytesHolder _bh = %s[_%sCount];\n", pluralName, pluralName);
+        w.format("    if (_bh == null) {\n");
         w.format("        _bh = new LightProtoCodec.BytesHolder();\n");
-        w.format("        %s.add(_bh);\n", pluralName);
-        w.format("    } else {\n");
-        w.format("        _bh = %s.get(_%sCount);\n", pluralName, pluralName);
+        w.format("        %s[_%sCount] = _bh;\n", pluralName, pluralName);
         w.format("    }\n");
         w.format("    _%sCount++;\n", pluralName);
         w.format("    return _bh;\n");
@@ -136,7 +134,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated<Fie
     @Override
     public void serializedSize(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-        w.format("    LightProtoCodec.BytesHolder _bh = %s.get(i);\n", pluralName);
+        w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
         w.format("    _size += %s_SIZE;\n", tagName());
         w.format("    _size += LightProtoCodec.computeVarIntSize(_bh.len) + _bh.len;\n");
         w.format("}\n");
@@ -145,7 +143,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated<Fie
     @Override
     public void clear(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-        w.format("    LightProtoCodec.BytesHolder _bh = %s.get(i);\n", pluralName);
+        w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
         w.format("    _bh.b = null;\n");
         w.format("    _bh.idx = -1;\n");
         w.format("    _bh.len = -1;\n");

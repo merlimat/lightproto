@@ -32,7 +32,7 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated<Fi
 
     @Override
     public void declaration(PrintWriter w) {
-        w.format("private java.util.List<LightProtoCodec.StringHolder> %s = null;\n", pluralName);
+        w.format("private LightProtoCodec.StringHolder[] %s = null;\n", pluralName);
         w.format("private int _%sCount = 0;\n", pluralName);
     }
 
@@ -53,7 +53,7 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated<Fi
         w.format("    if (idx < 0 || idx >= _%sCount) {\n", pluralName);
         w.format("        throw new IndexOutOfBoundsException(\"Index \" + idx + \" is out of the list size (\" + _%sCount + \") for field '%s'\");\n", pluralName, field.getName());
         w.format("    }\n");
-        w.format("    LightProtoCodec.StringHolder _sh = %s.get(idx);\n", pluralName);
+        w.format("    LightProtoCodec.StringHolder _sh = %s[idx];\n", pluralName);
         w.format("    if (_sh.s == null) {\n");
         w.format("        _sh.s = LightProtoCodec.readString(_parsedBuffer, _sh.idx, _sh.len);\n");
         w.format("    }\n");
@@ -76,7 +76,7 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated<Fi
     @Override
     public void serialize(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-        w.format("    LightProtoCodec.StringHolder _sh = %s.get(i);\n", pluralName);
+        w.format("    LightProtoCodec.StringHolder _sh = %s[i];\n", pluralName);
         w.format("    %s;\n", writeTagExpr(tagName()));
         w.format("    LightProtoCodec.writeVarInt(_b, _sh.len);\n");
         w.format("    if (_sh.idx == -1) {\n");
@@ -97,9 +97,6 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated<Fi
     @Override
     public void setter(PrintWriter w, String enclosingType) {
         w.format("public void %s(String %s) {\n", Util.camelCase("add", singularName), singularName);
-        w.format("    if (%s == null) {\n", pluralName);
-        w.format("        %s = new java.util.ArrayList<LightProtoCodec.StringHolder>();\n", pluralName);
-        w.format("    }\n");
         w.format("    LightProtoCodec.StringHolder _sh = _%sStringHolder();\n", Util.camelCase("new", singularName));
         w.format("    _cachedSize = -1;\n");
         w.format("    _sh.s = %s;\n", singularName);
@@ -117,14 +114,15 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated<Fi
 
         w.format("private LightProtoCodec.StringHolder _%sStringHolder() {\n", Util.camelCase("new", singularName));
         w.format("    if (%s == null) {\n", pluralName);
-        w.format("         %s = new java.util.ArrayList<LightProtoCodec.StringHolder>();\n", pluralName);
+        w.format("         %s = new LightProtoCodec.StringHolder[4];\n", pluralName);
         w.format("    }\n");
-        w.format("    LightProtoCodec.StringHolder _sh;\n");
-        w.format("    if (%s.size() == _%sCount) {\n", pluralName, pluralName);
+        w.format("    if (%s.length == _%sCount) {\n", pluralName, pluralName);
+        w.format("        %s = java.util.Arrays.copyOf(%s, _%sCount * 2);\n", pluralName, pluralName, pluralName);
+        w.format("    }\n");
+        w.format("    LightProtoCodec.StringHolder _sh = %s[_%sCount];\n", pluralName, pluralName);
+        w.format("    if (_sh == null) {\n");
         w.format("        _sh = new LightProtoCodec.StringHolder();\n");
-        w.format("        %s.add(_sh);\n", pluralName);
-        w.format("    } else {\n");
-        w.format("        _sh = %s.get(_%sCount);\n", pluralName, pluralName);
+        w.format("        %s[_%sCount] = _sh;\n", pluralName, pluralName);
         w.format("    }\n");
         w.format("    _%sCount++;\n", pluralName);
         w.format("    return _sh;\n");
@@ -134,7 +132,7 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated<Fi
     @Override
     public void serializedSize(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-        w.format("    LightProtoCodec.StringHolder _sh = %s.get(i);\n", pluralName);
+        w.format("    LightProtoCodec.StringHolder _sh = %s[i];\n", pluralName);
         w.format("    _size += %s_SIZE;\n", tagName());
         w.format("    _size += LightProtoCodec.computeVarIntSize(_sh.len) + _sh.len;\n");
         w.format("}\n");
@@ -143,7 +141,7 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated<Fi
     @Override
     public void clear(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-        w.format("    LightProtoCodec.StringHolder _sh = %s.get(i);\n", pluralName);
+        w.format("    LightProtoCodec.StringHolder _sh = %s[i];\n", pluralName);
         w.format("    _sh.s = null;\n");
         w.format("    _sh.idx = -1;\n");
         w.format("    _sh.len = -1;\n");
