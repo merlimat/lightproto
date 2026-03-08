@@ -168,6 +168,7 @@ public class LightProtoMessage {
             w.format("            checkRequiredFields();\n");
         }
         w.format("            int _writeIdx = _b.writerIndex();\n");
+        w.format("            _b.ensureWritable(getSerializedSize());\n");
         for (LightProtoField f : fields) {
 
             if (f.isRequired() || f.isRepeated()) {
