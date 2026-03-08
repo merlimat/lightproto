@@ -92,6 +92,7 @@ public class LightProtoMessage {
         w.format("        public void parseFrom(io.netty.buffer.ByteBuf _buffer, int _size) {\n");
         w.format("            clear();\n");
         w.format("            int _endIdx = _buffer.readerIndex() + _size;\n");
+        w.format("            boolean _hasUnknownFields = false;\n");
         w.format("            while (_buffer.readerIndex() < _endIdx) {\n");
         w.format("                int _tag = LightProtoCodec.readVarInt(_buffer);\n");
         w.format("                switch (_tag) {\n");
@@ -114,12 +115,16 @@ public class LightProtoMessage {
         }
 
         w.format("                default:\n");
+        w.format("                    _hasUnknownFields = true;\n");
         w.format("                    LightProtoCodec.skipUnknownField(_tag, _buffer);\n");
         w.format("                }\n");
         w.format("            }\n");
         if (hasRequiredFields()) {
             w.format("            checkRequiredFields();\n");
         }
+        w.format("            if (!_hasUnknownFields) {\n");
+        w.format("                _cachedSize = _size;\n");
+        w.format("            }\n");
         w.format("            _parsedBuffer = _buffer;\n");
         w.format("        }\n");
     }
