@@ -397,7 +397,52 @@ class LightProtoCodec {
     }
 
     static String readString(ByteBuf b, int index, int len) {
+        if (UNSAFE != null && STRING_VALUE_OFFSET >= 0) {
+            // Allocate target byte[] and copy directly from ByteBuf memory,
+            // bypassing Netty's getBytes chain (checkIndex, checkRangeBounds, etc.)
+            byte[] value = new byte[len];
+            if (b.hasMemoryAddress()) {
+                UNSAFE.copyMemory(null, b.memoryAddress() + index, value, BYTE_ARRAY_BASE_OFFSET, len);
+            } else if (b.hasArray()) {
+                UNSAFE.copyMemory(b.array(), BYTE_ARRAY_BASE_OFFSET + b.arrayOffset() + index,
+                        value, BYTE_ARRAY_BASE_OFFSET, len);
+            } else {
+                b.getBytes(index, value, 0, len);
+            }
+
+            // For ASCII strings (all bytes < 128), the bytes are valid Latin1 characters.
+            // Create a String directly via Unsafe, injecting the byte[] as the internal value
+            // with LATIN1 coder (0). This eliminates the second copy that new String() would do.
+            if (_isAscii(value, len)) {
+                try {
+                    String s = (String) UNSAFE.allocateInstance(String.class);
+                    UNSAFE.putObject(s, STRING_VALUE_OFFSET, value);
+                    // coder=0 (LATIN1) is already set by zero-initialization from allocateInstance
+                    return s;
+                } catch (InstantiationException e) {
+                    // fall through to standard path
+                }
+            }
+
+            // Non-ASCII: decode UTF-8 (creates another internal copy, but unavoidable)
+            return new String(value, 0, len, StandardCharsets.UTF_8);
+        }
         return b.toString(index, len, StandardCharsets.UTF_8);
+    }
+
+    private static boolean _isAscii(byte[] bytes, int len) {
+        // Check 8 bytes at a time using long reads — data is in L1 cache from the copy
+        int i = 0;
+        for (; i + 7 < len; i += 8) {
+            if ((UNSAFE.getLong(bytes, BYTE_ARRAY_BASE_OFFSET + i) & 0x8080808080808080L) != 0) {
+                return false;
+            }
+        }
+        // Check remaining bytes
+        for (; i < len; i++) {
+            if (bytes[i] < 0) return false;
+        }
+        return true;
     }
 
     static void skipUnknownField(int tag, ByteBuf buffer) {
