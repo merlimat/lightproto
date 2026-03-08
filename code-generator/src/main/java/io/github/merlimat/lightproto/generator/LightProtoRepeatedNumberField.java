@@ -31,6 +31,15 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated<Fi
     }
 
     @Override
+    public void tags(PrintWriter w) {
+        super.tags(w);
+        int dataSize = LightProtoNumberField.fixedDataSize(field);
+        if (dataSize >= 0) {
+            w.format("        private static final int %s_TOTAL_SIZE = %s_SIZE + %d;\n", tagName(), tagName(), dataSize);
+        }
+    }
+
+    @Override
     public void declaration(PrintWriter w) {
         w.format("private %s[] %s = null;\n", field.getJavaType(), pluralName);
         w.format("private int _%sCount = 0;\n", pluralName);
@@ -65,14 +74,19 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated<Fi
 
     @Override
     public void serialize(PrintWriter w) {
+        int fixedSize = LightProtoNumberField.fixedDataSize(field);
         if (field.getOption("packed") == Boolean.TRUE) {
             w.format("    %s;\n", writeTagExpr(tagName() + "_PACKED"));
-            w.format("    int _%sSize = 0;\n", pluralName);
-            w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-            w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
-            w.format("    _%sSize += %s;\n", pluralName, LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
-            w.format("}\n");
-            w.format("    LightProtoCodec.writeVarInt(_b, _%sSize);\n", pluralName);
+            if (fixedSize >= 0) {
+                w.format("    LightProtoCodec.writeVarInt(_b, _%sCount * %d);\n", pluralName, fixedSize);
+            } else {
+                w.format("    int _%sSize = 0;\n", pluralName);
+                w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+                w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+                w.format("    _%sSize += %s;\n", pluralName, LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
+                w.format("}\n");
+                w.format("    LightProtoCodec.writeVarInt(_b, _%sSize);\n", pluralName);
+            }
             w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
             w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
             LightProtoNumberField.serializeNumber(w, field, "_item");
@@ -110,21 +124,30 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated<Fi
     @Override
     public void serializedSize(PrintWriter w) {
 
+        int fixedSize = LightProtoNumberField.fixedDataSize(field);
         if (field.getOption("packed") == Boolean.TRUE) {
+            if (fixedSize >= 0) {
+                w.format("    int _%sSize = _%sCount * %d;\n", pluralName, pluralName, fixedSize);
+            } else {
+                w.format("    int _%sSize = 0;\n", pluralName);
+                w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+                w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+                w.format("    _%sSize += %s;\n", pluralName, LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
+                w.format("}\n");
+            }
             w.format("    _size += %s_SIZE;\n", tagName());
-            w.format("    int _%sSize = 0;\n", pluralName);
-            w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-            w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
-            w.format("    _%sSize += %s;\n", pluralName, LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
-            w.format("}\n");
             w.format("    _size += LightProtoCodec.computeVarIntSize(_%sSize);\n", pluralName);
             w.format("    _size += _%sSize;\n", pluralName);
         } else {
-            w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-            w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
-            w.format("    _size += %s_SIZE;\n", tagName());
-            w.format("    _size += %s;\n", LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
-            w.format("}\n");
+            if (fixedSize >= 0) {
+                w.format("_size += _%sCount * %s_TOTAL_SIZE;\n", pluralName, tagName());
+            } else {
+                w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+                w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+                w.format("    _size += %s_SIZE;\n", tagName());
+                w.format("    _size += %s;\n", LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
+                w.format("}\n");
+            }
         }
     }
 

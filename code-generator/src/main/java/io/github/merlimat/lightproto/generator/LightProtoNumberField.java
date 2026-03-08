@@ -158,6 +158,15 @@ public class LightProtoNumberField extends LightProtoField<Field<?>> {
         }
     }
 
+    @Override
+    public void tags(PrintWriter w) {
+        super.tags(w);
+        int dataSize = fixedDataSize(field);
+        if (dataSize >= 0) {
+            w.format("        private static final int %s_TOTAL_SIZE = %s_SIZE + %d;\n", tagName(), tagName(), dataSize);
+        }
+    }
+
     public void getter(PrintWriter w) {
         w.format("        public %s %s() {\n", field.getJavaType(), Util.camelCase("get", field.getName()));
         if (!field.isDefaultValueSet()) {
@@ -211,10 +220,26 @@ public class LightProtoNumberField extends LightProtoField<Field<?>> {
         }
     }
 
+    static int fixedDataSize(Field<?> field) {
+        String type = field.getProtoType();
+        if (type.equals("fixed32") || type.equals("sfixed32") || type.equals("float")) {
+            return 4;
+        } else if (type.equals("fixed64") || type.equals("sfixed64") || type.equals("double")) {
+            return 8;
+        } else if (type.equals("bool")) {
+            return 1;
+        }
+        return -1;
+    }
+
     @Override
     public void serializedSize(PrintWriter w) {
-        w.format("_size += %s_SIZE;\n", tagName());
-        w.format("_size += %s;\n", serializedSizeOfNumber(field, ccName));
+        if (fixedDataSize(field) >= 0) {
+            w.format("_size += %s_TOTAL_SIZE;\n", tagName());
+        } else {
+            w.format("_size += %s_SIZE;\n", tagName());
+            w.format("_size += %s;\n", serializedSizeOfNumber(field, ccName));
+        }
     }
 
     @Override
