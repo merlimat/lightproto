@@ -172,17 +172,54 @@ class LightProtoCodec {
     }
 
     static long readVarInt64(ByteBuf buf) {
-        int shift = 0;
-        long result = 0;
-        while (shift < 64) {
-            final byte b = buf.readByte();
-            result |= (long) (b & 0x7F) << shift;
-            if ((b & 0x80) == 0) {
-                return result;
-            }
-            shift += 7;
+        long result;
+        byte tmp = buf.readByte();
+        if (tmp >= 0) {
+            return tmp;
         }
-        throw new IllegalArgumentException("Encountered a malformed varint.");
+        result = tmp & 0x7fL;
+        if ((tmp = buf.readByte()) >= 0) {
+            result |= (long) tmp << 7;
+        } else {
+            result |= (tmp & 0x7fL) << 7;
+            if ((tmp = buf.readByte()) >= 0) {
+                result |= (long) tmp << 14;
+            } else {
+                result |= (tmp & 0x7fL) << 14;
+                if ((tmp = buf.readByte()) >= 0) {
+                    result |= (long) tmp << 21;
+                } else {
+                    result |= (tmp & 0x7fL) << 21;
+                    if ((tmp = buf.readByte()) >= 0) {
+                        result |= (long) tmp << 28;
+                    } else {
+                        result |= (tmp & 0x7fL) << 28;
+                        if ((tmp = buf.readByte()) >= 0) {
+                            result |= (long) tmp << 35;
+                        } else {
+                            result |= (tmp & 0x7fL) << 35;
+                            if ((tmp = buf.readByte()) >= 0) {
+                                result |= (long) tmp << 42;
+                            } else {
+                                result |= (tmp & 0x7fL) << 42;
+                                if ((tmp = buf.readByte()) >= 0) {
+                                    result |= (long) tmp << 49;
+                                } else {
+                                    result |= (tmp & 0x7fL) << 49;
+                                    if ((tmp = buf.readByte()) >= 0) {
+                                        result |= (long) tmp << 56;
+                                    } else {
+                                        result |= (tmp & 0x7fL) << 56;
+                                        result |= ((long) buf.readByte()) << 63;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     static int computeSignedVarIntSize(final int value) {
