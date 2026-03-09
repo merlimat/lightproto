@@ -1,8 +1,9 @@
 name: Publish to Maven Central
 
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   publish:
@@ -24,6 +25,11 @@ jobs:
           server-password: SONATYPE_PASSWORD
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
+
+      - name: Set version from tag
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          mvn -B -ntp versions:set -DnewVersion=$VERSION -DgenerateBackupPoms=false
 
       - name: Publish artifacts
         run: mvn -B -ntp -Prelease deploy
