@@ -22,14 +22,17 @@ public class ProtoFileDescriptor {
     private final String syntax;
     private final List<ProtoMessageDescriptor> messages;
     private final List<ProtoEnumDescriptor> enums;
+    private final List<ProtoServiceDescriptor> services;
 
     public ProtoFileDescriptor(String javaPackageName, String syntax,
                                List<ProtoMessageDescriptor> messages,
-                               List<ProtoEnumDescriptor> enums) {
+                               List<ProtoEnumDescriptor> enums,
+                               List<ProtoServiceDescriptor> services) {
         this.javaPackageName = javaPackageName;
         this.syntax = syntax;
         this.messages = messages;
         this.enums = enums;
+        this.services = services;
     }
 
     public String getJavaPackageName() {
@@ -46,5 +49,9 @@ public class ProtoFileDescriptor {
 
     public List<ProtoEnumDescriptor> getEnumGroups() {
         return enums;
+    }
+
+    public List<ProtoServiceDescriptor> getServices() {
+        return services;
     }
 }

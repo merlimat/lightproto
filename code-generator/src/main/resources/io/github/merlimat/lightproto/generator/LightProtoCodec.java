@@ -466,6 +466,12 @@ class LightProtoCodec {
         }
     }
 
+    interface LightProtoMessage {
+        int getSerializedSize();
+        int writeTo(ByteBuf b);
+        void parseFrom(ByteBuf buffer, int size);
+    }
+
     static final class StringHolder {
         String s;
         int idx;

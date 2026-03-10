@@ -34,6 +34,7 @@ public class LightProto {
     private final boolean useOuterClass;
     private final List<LightProtoEnum> enums;
     private final List<LightProtoMessage> messages;
+    private final List<LightProtoService> services;
 
     public LightProto(ProtoFileDescriptor proto, String outerClassName, boolean useOuterClass) {
         this.proto = proto;
@@ -41,6 +42,7 @@ public class LightProto {
         this.useOuterClass = useOuterClass;
         this.enums = proto.getEnumGroups().stream().map(LightProtoEnum::new).collect(Collectors.toList());
         this.messages = proto.getMessages().stream().map(m -> new LightProtoMessage(m, useOuterClass)).collect(Collectors.toList());
+        this.services = proto.getServices().stream().map(LightProtoService::new).collect(Collectors.toList());
     }
 
     public List<File> generate(File directory) throws IOException {
@@ -81,6 +83,8 @@ public class LightProto {
             generatedFiles.add(file);
         }
 
+        generatedFiles.addAll(generateServiceFiles(outDirectory));
+
         return generatedFiles;
     }
 
@@ -102,7 +106,27 @@ public class LightProto {
         formatAndWrite(outFile, sw.toString());
 
         log.info("LightProto generated {}", outFile);
-        return Collections.singletonList(outFile);
+
+        List<File> generatedFiles = new ArrayList<>();
+        generatedFiles.add(outFile);
+        generatedFiles.addAll(generateServiceFiles(outDirectory));
+        return generatedFiles;
+    }
+
+    private List<File> generateServiceFiles(File outDirectory) throws IOException {
+        List<File> generatedFiles = new ArrayList<>();
+        for (LightProtoService svc : services) {
+            File file = new File(outDirectory, svc.getName() + "Grpc.java");
+            StringWriter sw = new StringWriter();
+            try (PrintWriter pw = new PrintWriter(sw)) {
+                pw.format("package %s;\n", proto.getJavaPackageName());
+                svc.generate(pw);
+            }
+            formatAndWrite(file, sw.toString());
+            log.info("LightProto generated gRPC service {}", file);
+            generatedFiles.add(file);
+        }
+        return generatedFiles;
     }
 
     private void formatAndWrite(File file, String content) throws IOException {

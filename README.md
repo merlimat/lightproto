@@ -99,6 +99,69 @@ md.clear();
 md.setProducerName("producer-2")...
 ```
 
+### gRPC Integration
+
+LightProto generates `*Grpc.java` service stubs directly from `service` definitions in `.proto`
+files — no extra protoc plugin needed. The generated code follows the same structure as
+`protoc-gen-grpc-java` but uses LightProto messages, so you get gRPC with zero-copy
+serialization and no Google Protobuf runtime dependency.
+
+Add the gRPC dependency to your project:
+
+```xml
+<dependency>
+    <groupId>io.grpc</groupId>
+    <artifactId>grpc-stub</artifactId>
+    <version>1.68.0</version>
+</dependency>
+```
+
+Define a service in your `.proto` file:
+
+```protobuf
+syntax = "proto3";
+package myapp;
+
+message HelloRequest  { string name = 1; }
+message HelloResponse { string greeting = 1; }
+
+service Greeter {
+    rpc SayHello (HelloRequest) returns (HelloResponse);
+    rpc SayHelloStream (HelloRequest) returns (stream HelloResponse);
+}
+```
+
+Implement the service by extending the generated `ImplBase`:
+
+```java
+class GreeterImpl extends GreeterGrpc.GreeterImplBase {
+    @Override
+    public void sayHello(HelloRequest request, StreamObserver<HelloResponse> responseObserver) {
+        HelloResponse response = new HelloResponse();
+        response.setGreeting("Hello, " + request.getName() + "!");
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+    }
+}
+```
+
+Create a client using the generated stubs:
+
+```java
+// Blocking stub (unary and server-streaming)
+GreeterGrpc.GreeterBlockingStub blocking = GreeterGrpc.newBlockingStub(channel);
+HelloRequest request = new HelloRequest();
+request.setName("World");
+HelloResponse response = blocking.sayHello(request);
+
+// Async stub (all method types including client/bidi streaming)
+GreeterGrpc.GreeterStub async = GreeterGrpc.newStub(channel);
+async.sayHelloStream(request, new StreamObserver<HelloResponse>() { ... });
+```
+
+The generated stubs support all four gRPC method types: unary, server streaming,
+client streaming, and bidirectional streaming.
+
 ## Supported Features
 
 | Feature | proto2 | proto3 |
@@ -118,7 +181,7 @@ md.setProducerName("producer-2")...
 | Nested enum / message definitions | ✅ | ✅ |
 | Default values | ✅ | — |
 | Multiple `.proto` files / `import` | ✅ | ✅ |
-| `service` / RPC definitions | ❌ | ❌ |
+| `service` / RPC definitions (gRPC stubs) | ✅ | ✅ |
 | Extensions | ❌ | — |
 | `Any`, `Timestamp`, well-known types | ❌ | ❌ |
 | `group` (deprecated) | ❌ | — |

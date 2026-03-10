@@ -57,7 +57,7 @@ public class LightProtoMessage {
     }
 
     public void generate(PrintWriter w) {
-        w.format("    public %s final class %s {\n", isNested ? "static" : "", message.getName());
+        w.format("    public %s final class %s implements LightProtoCodec.LightProtoMessage {\n", isNested ? "static" : "", message.getName());
 
         enums.forEach(e -> e.generate(w));
         nestedMessages.forEach(nm -> nm.generate(w));
@@ -100,7 +100,7 @@ public class LightProtoMessage {
     }
 
     private void generateParseFrom(PrintWriter w) {
-        w.format("        public void parseFrom(io.netty.buffer.ByteBuf _buffer, int _size) {\n");
+        w.format("        @Override public void parseFrom(io.netty.buffer.ByteBuf _buffer, int _size) {\n");
         w.format("            clear();\n");
         w.format("            int _endIdx = _buffer.readerIndex() + _size;\n");
         w.format("            boolean _hasUnknownFields = false;\n");
@@ -185,7 +185,7 @@ public class LightProtoMessage {
     }
 
     private void generateSerialize(PrintWriter w) {
-        w.format("        public int writeTo(io.netty.buffer.ByteBuf _b) {\n");
+        w.format("        @Override public int writeTo(io.netty.buffer.ByteBuf _b) {\n");
         if (hasRequiredFields()) {
             w.format("            checkRequiredFields();\n");
         }
@@ -220,7 +220,7 @@ public class LightProtoMessage {
     }
 
     private void generateGetSerializedSize(PrintWriter w) {
-        w.format("public int getSerializedSize() {\n");
+        w.format("@Override public int getSerializedSize() {\n");
         w.format("    if (_cachedSize > -1) {\n");
         w.format("        return _cachedSize;\n");
         w.format("    }\n");

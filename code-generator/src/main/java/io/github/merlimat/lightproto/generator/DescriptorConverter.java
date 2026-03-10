@@ -20,7 +20,9 @@ import com.google.protobuf.DescriptorProtos.EnumDescriptorProto;
 import com.google.protobuf.DescriptorProtos.EnumValueDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FieldDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
+import com.google.protobuf.DescriptorProtos.MethodDescriptorProto;
 import com.google.protobuf.DescriptorProtos.OneofDescriptorProto;
+import com.google.protobuf.DescriptorProtos.ServiceDescriptorProto;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -79,6 +81,7 @@ public class DescriptorConverter {
     public static ProtoFileDescriptor convert(FileDescriptorProto fileProto) {
         String javaPackage = resolveJavaPackage(fileProto);
         String syntax = fileProto.getSyntax().isEmpty() ? "proto2" : fileProto.getSyntax();
+        String protoPackage = fileProto.getPackage();
 
         List<ProtoEnumDescriptor> enums = fileProto.getEnumTypeList().stream()
                 .map(DescriptorConverter::convertEnum)
@@ -88,7 +91,11 @@ public class DescriptorConverter {
                 .map(m -> convertMessage(m, syntax))
                 .collect(Collectors.toList());
 
-        return new ProtoFileDescriptor(javaPackage, syntax, messages, enums);
+        List<ProtoServiceDescriptor> services = fileProto.getServiceList().stream()
+                .map(s -> convertService(s, protoPackage))
+                .collect(Collectors.toList());
+
+        return new ProtoFileDescriptor(javaPackage, syntax, messages, enums, services);
     }
 
     private static String resolveJavaPackage(FileDescriptorProto fileProto) {
@@ -291,6 +298,18 @@ public class DescriptorConverter {
                 .collect(Collectors.toList());
 
         return new ProtoEnumDescriptor(enumProto.getName(), values);
+    }
+
+    private static ProtoServiceDescriptor convertService(ServiceDescriptorProto serviceProto, String protoPackage) {
+        List<ProtoMethodDescriptor> methods = serviceProto.getMethodList().stream()
+                .map(m -> new ProtoMethodDescriptor(
+                        m.getName(),
+                        resolveTypeName(m.getInputType()),
+                        resolveTypeName(m.getOutputType()),
+                        m.getClientStreaming(),
+                        m.getServerStreaming()))
+                .collect(Collectors.toList());
+        return new ProtoServiceDescriptor(serviceProto.getName(), protoPackage, methods);
     }
 
     /**

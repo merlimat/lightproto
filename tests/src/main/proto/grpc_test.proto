@@ -1,0 +1,21 @@
+syntax = "proto3";
+package io.github.merlimat.lightproto.tests;
+
+option java_outer_classname = "GrpcTestProtos";
+
+message GrpcRequest {
+    string name = 1;
+    int32 value = 2;
+}
+
+message GrpcResponse {
+    string message = 1;
+    int32 result = 2;
+}
+
+service TestService {
+    rpc Unary (GrpcRequest) returns (GrpcResponse);
+    rpc ServerStream (GrpcRequest) returns (stream GrpcResponse);
+    rpc ClientStream (stream GrpcRequest) returns (GrpcResponse);
+    rpc BidiStream (stream GrpcRequest) returns (stream GrpcResponse);
+}
