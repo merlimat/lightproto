@@ -155,22 +155,23 @@ public class NumbersTest {
         assertFalse(lpn.hasXSint32());
         assertFalse(lpn.hasXSint64());
 
-        assertException(() -> lpn.getEnum1());
-        assertException(() -> lpn.getEnum2());
-        assertException(() -> lpn.isXBool());
-        assertException(() -> lpn.getXDouble());
-        assertException(() -> lpn.getXFixed32());
-        assertException(() -> lpn.getXFixed64());
-        assertException(() -> lpn.getXSfixed32());
-        assertException(() -> lpn.getXSfixed64());
-        assertException(() -> lpn.getXFloat());
-        assertException(() -> lpn.getXInt32());
-        assertException(() -> lpn.getXInt64());
-        assertException(() -> lpn.getXInt32());
-        assertException(() -> lpn.getXUint64());
-        assertException(() -> lpn.getXUint32());
-        assertException(() -> lpn.getXSint32());
-        assertException(() -> lpn.getXSint64());
+        // Optional fields return defaults when unset (matching protobuf behavior)
+        assertEquals(Enum1.X1_0, lpn.getEnum1());
+        assertEquals(Numbers.Enum2.X2_0, lpn.getEnum2());
+        assertFalse(lpn.isXBool());
+        assertEquals(0.0, lpn.getXDouble());
+        assertEquals(0, lpn.getXFixed32());
+        assertEquals(0L, lpn.getXFixed64());
+        assertEquals(0, lpn.getXSfixed32());
+        assertEquals(0L, lpn.getXSfixed64());
+        assertEquals(0.0f, lpn.getXFloat());
+        assertEquals(0, lpn.getXInt32());
+        assertEquals(0L, lpn.getXInt64());
+        assertEquals(0, lpn.getXInt32());
+        assertEquals(0L, lpn.getXUint64());
+        assertEquals(0, lpn.getXUint32());
+        assertEquals(0, lpn.getXSint32());
+        assertEquals(0L, lpn.getXSint64());
 
 
         lpn.setEnum1(Enum1.X1_1);

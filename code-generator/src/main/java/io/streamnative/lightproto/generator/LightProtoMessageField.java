@@ -48,7 +48,11 @@ public class LightProtoMessageField extends LightProtoField {
     public void getter(PrintWriter w) {
         w.format("public %s %s() {\n", field.getJavaType(), Util.camelCase("get", field.getName()));
         w.format("    if (!%s()) {\n", Util.camelCase("has", ccName));
-        w.format("        throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
+        if (field.isRequired()) {
+            w.format("        throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
+        } else {
+            w.format("        return null;\n");
+        }
         w.format("    }\n");
         w.format("    return %s;\n", ccName);
         w.format("}\n");
