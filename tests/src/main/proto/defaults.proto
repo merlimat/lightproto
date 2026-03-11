@@ -1,0 +1,55 @@
+syntax = "proto2";
+package io.streamnative.lightproto.tests;
+
+enum DefaultEnum {
+    DE_ZERO = 0;
+    DE_ONE = 1;
+    DE_TWO = 2;
+}
+
+message DefaultNested {
+    optional int32 value = 1;
+}
+
+message DefaultsOptionalNoDefault {
+    optional int32 f_int32 = 1;
+    optional int64 f_int64 = 2;
+    optional uint32 f_uint32 = 3;
+    optional uint64 f_uint64 = 4;
+    optional sint32 f_sint32 = 5;
+    optional sint64 f_sint64 = 6;
+    optional fixed32 f_fixed32 = 7;
+    optional fixed64 f_fixed64 = 8;
+    optional sfixed32 f_sfixed32 = 9;
+    optional sfixed64 f_sfixed64 = 10;
+    optional float f_float = 11;
+    optional double f_double = 12;
+    optional bool f_bool = 13;
+    optional string f_string = 14;
+    optional bytes f_bytes = 15;
+    optional DefaultEnum f_enum = 16;
+    optional DefaultNested f_msg = 17;
+}
+
+message DefaultsOptionalWithDefault {
+    optional int32 f_int32 = 1 [default = 42];
+    optional int64 f_int64 = 2 [default = 100];
+    optional uint32 f_uint32 = 3 [default = 7];
+    optional uint64 f_uint64 = 4 [default = 200];
+    optional sint32 f_sint32 = 5 [default = -5];
+    optional sint64 f_sint64 = 6 [default = -50];
+    optional fixed32 f_fixed32 = 7 [default = 99];
+    optional fixed64 f_fixed64 = 8 [default = 999];
+    optional sfixed32 f_sfixed32 = 9 [default = -99];
+    optional sfixed64 f_sfixed64 = 10 [default = -999];
+    optional float f_float = 11 [default = 3.14];
+    optional double f_double = 12 [default = 2.718];
+    optional bool f_bool = 13 [default = true];
+    optional string f_string = 14 [default = "hello"];
+}
+
+message DefaultsRequired {
+    required int32 f_int32 = 1;
+    required string f_string = 2;
+    required bool f_bool = 3;
+}

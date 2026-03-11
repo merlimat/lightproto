@@ -45,3 +45,15 @@ message Proto3Message {
     // Map
     map<string, int32> string_to_int = 16;
 }
+
+message Proto3Defaults {
+    optional int32 opt_int32 = 1;
+    optional int64 opt_int64 = 2;
+    optional float opt_float = 3;
+    optional double opt_double = 4;
+    optional bool opt_bool = 5;
+    optional string opt_string = 6;
+    optional bytes opt_bytes = 7;
+    optional Proto3Enum opt_enum = 8;
+    optional Proto3Nested opt_msg = 9;
+}
