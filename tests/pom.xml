@@ -25,6 +25,7 @@
         <version>0.5-SNAPSHOT</version>
     </parent>
     <artifactId>lightproto-tests</artifactId>
+    <name>lightproto-tests</name>
 
     <properties>
         <maven.deploy.skip>true</maven.deploy.skip>

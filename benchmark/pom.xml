@@ -28,6 +28,7 @@
     </parent>
 
     <artifactId>lightproto-benchmark</artifactId>
+    <name>lightproto-benchmark</name>
     <packaging>jar</packaging>
 
     <properties>

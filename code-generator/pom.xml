@@ -27,6 +27,7 @@
     </parent>
 
     <artifactId>lightproto-code-generator</artifactId>
+    <name>lightproto-code-generator</name>
     <packaging>jar</packaging>
 
     <dependencies>
