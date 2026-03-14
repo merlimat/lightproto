@@ -137,6 +137,13 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void materialize(PrintWriter w) {
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    %s[i]._materialize();\n", pluralName);
+        w.format("}\n");
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

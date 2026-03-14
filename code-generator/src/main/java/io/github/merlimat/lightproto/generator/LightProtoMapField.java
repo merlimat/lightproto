@@ -722,6 +722,42 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void materialize(PrintWriter w) {
+        if (isStringKey()) {
+            w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
+            w.format("    LightProtoCodec.StringHolder _ksh = _%sKeys[_i];\n", ccName);
+            w.format("    if (_ksh.s == null && _ksh.idx >= 0) {\n");
+            w.format("        _ksh.s = LightProtoCodec.readString(_parsedBuffer, _ksh.idx, _ksh.len);\n");
+            w.format("        _ksh.idx = -1;\n");
+            w.format("    }\n");
+            w.format("}\n");
+        }
+        if (isStringValue()) {
+            w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
+            w.format("    LightProtoCodec.StringHolder _vsh = _%sValues[_i];\n", ccName);
+            w.format("    if (_vsh.s == null && _vsh.idx >= 0) {\n");
+            w.format("        _vsh.s = LightProtoCodec.readString(_parsedBuffer, _vsh.idx, _vsh.len);\n");
+            w.format("        _vsh.idx = -1;\n");
+            w.format("    }\n");
+            w.format("}\n");
+        } else if (isBytesValue()) {
+            w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
+            w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[_i];\n", ccName);
+            w.format("    if (_vbh.b == null && _vbh.idx >= 0) {\n");
+            w.format("        byte[] _tmp = new byte[_vbh.len];\n");
+            w.format("        _parsedBuffer.getBytes(_vbh.idx, _tmp);\n");
+            w.format("        _vbh.b = io.netty.buffer.Unpooled.wrappedBuffer(_tmp);\n");
+            w.format("        _vbh.idx = -1;\n");
+            w.format("    }\n");
+            w.format("}\n");
+        } else if (isMessageValue()) {
+            w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
+            w.format("    _%sValues[_i]._materialize();\n", ccName);
+            w.format("}\n");
+        }
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

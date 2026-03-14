@@ -121,6 +121,14 @@ public class LightProtoStringField extends LightProtoField {
     }
 
     @Override
+    public void materialize(PrintWriter w) {
+        w.format("if (_%sBufferIdx >= 0) {\n", ccName);
+        w.format("    %s = LightProtoCodec.readString(_parsedBuffer, _%sBufferIdx, _%sBufferLen);\n", ccName, ccName, ccName);
+        w.format("    _%sBufferIdx = -1;\n", ccName);
+        w.format("}\n");
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

@@ -82,6 +82,20 @@ public class LightProtoMessage {
         generateClear(w);
         generateCopyFrom(w);
 
+        generateMaterialize(w);
+
+        w.println("        /**");
+        w.println("         * Deserialize this message from the given buffer, optionally resolving all");
+        w.println("         * lazy fields eagerly so the object does not retain a reference to the buffer.");
+        w.println("         * @param _buffer the buffer to read from");
+        w.println("         * @param _size the number of bytes to read");
+        w.println("         * @param eager if true, all fields are fully deserialized and the buffer reference is released");
+        w.println("         */");
+        w.println("        public void parseFrom(io.netty.buffer.ByteBuf _buffer, int _size, boolean eager) {");
+        w.println("            parseFrom(_buffer, _size);");
+        w.println("            if (eager) { _materialize(); }");
+        w.println("        }");
+
         w.println("        /** Serialize this message to a new byte array. */");
         w.println("        public byte[] toByteArray() {");
         w.println("            byte[] a = new byte[getSerializedSize()];");
@@ -95,6 +109,7 @@ public class LightProtoMessage {
         w.println("            io.netty.buffer.ByteBuf b = io.netty.buffer.Unpooled.wrappedBuffer(a);");
         w.println("            this.parseFrom(b, b.readableBytes());");
         w.println("        }");
+
 
         w.println("        private int _cachedSize;\n");
         w.println("        private io.netty.buffer.ByteBuf _parsedBuffer;\n");
@@ -310,6 +325,15 @@ public class LightProtoMessage {
         }
 
         return false;
+    }
+
+    private void generateMaterialize(PrintWriter w) {
+        w.println("        void _materialize() {");
+        for (LightProtoField f : fields) {
+            f.materialize(w);
+        }
+        w.println("            _parsedBuffer = null;");
+        w.println("        }");
     }
 
     private void generateOneofFields(PrintWriter w) {

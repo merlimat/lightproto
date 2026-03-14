@@ -158,6 +158,19 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void materialize(PrintWriter w) {
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
+        w.format("    if (_bh.b == null && _bh.idx >= 0) {\n");
+        w.format("        byte[] _tmp = new byte[_bh.len];\n");
+        w.format("        _parsedBuffer.getBytes(_bh.idx, _tmp);\n");
+        w.format("        _bh.b = io.netty.buffer.Unpooled.wrappedBuffer(_tmp);\n");
+        w.format("        _bh.idx = -1;\n");
+        w.format("    }\n");
+        w.format("}\n");
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

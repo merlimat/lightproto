@@ -166,6 +166,17 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void materialize(PrintWriter w) {
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    LightProtoCodec.StringHolder _sh = %s[i];\n", pluralName);
+        w.format("    if (_sh.s == null && _sh.idx >= 0) {\n");
+        w.format("        _sh.s = LightProtoCodec.readString(_parsedBuffer, _sh.idx, _sh.len);\n");
+        w.format("        _sh.idx = -1;\n");
+        w.format("    }\n");
+        w.format("}\n");
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

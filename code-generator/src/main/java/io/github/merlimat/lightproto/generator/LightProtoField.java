@@ -142,6 +142,15 @@ public abstract class LightProtoField {
 
     abstract public void copy(PrintWriter w);
 
+    /**
+     * Generate code to eagerly resolve any lazily-deserialized data for this field,
+     * so the object no longer depends on _parsedBuffer.
+     * Default: no-op (already eagerly deserialized).
+     */
+    public void materialize(PrintWriter w) {
+        // Numbers, booleans, enums are already eagerly deserialized — nothing to do.
+    }
+
     public boolean isPackable() {
         return field.isPackable();
     }

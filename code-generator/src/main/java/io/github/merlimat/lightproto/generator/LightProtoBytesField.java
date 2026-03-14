@@ -136,6 +136,16 @@ public class LightProtoBytesField extends LightProtoField {
 
 
     @Override
+    public void materialize(PrintWriter w) {
+        w.format("if (_%sIdx >= 0) {\n", ccName);
+        w.format("    byte[] _tmp = new byte[_%sLen];\n", ccName);
+        w.format("    _parsedBuffer.getBytes(_%sIdx, _tmp);\n", ccName);
+        w.format("    %s = io.netty.buffer.Unpooled.wrappedBuffer(_tmp);\n", ccName);
+        w.format("    _%sIdx = -1;\n", ccName);
+        w.format("}\n");
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

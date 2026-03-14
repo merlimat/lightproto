@@ -87,6 +87,13 @@ public class LightProtoMessageField extends LightProtoField {
     }
 
     @Override
+    public void materialize(PrintWriter w) {
+        w.format("if (%s()) {\n", Util.camelCase("has", ccName));
+        w.format("    %s._materialize();\n", ccName);
+        w.format("}\n");
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

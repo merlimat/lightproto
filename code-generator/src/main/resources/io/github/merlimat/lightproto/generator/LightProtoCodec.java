@@ -470,6 +470,7 @@ class LightProtoCodec {
         int getSerializedSize();
         int writeTo(ByteBuf b);
         void parseFrom(ByteBuf buffer, int size);
+        void parseFrom(ByteBuf buffer, int size, boolean eager);
     }
 
     static final class StringHolder {
