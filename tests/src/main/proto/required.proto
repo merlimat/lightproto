@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 syntax = "proto2";
-package com.github.splunk.lightproto.tests;
+package io.github.merlimat.lightproto.tests;
 
 message R {
     required int32 a = 1;

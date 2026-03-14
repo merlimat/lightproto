@@ -21,32 +21,32 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.github.splunk.lightproto</groupId>
+    <groupId>io.github.merlimat.lightproto</groupId>
     <artifactId>lightproto</artifactId>
-    <version>0.4</version>
+    <version>0.5-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>lightproto</name>
-    <url>https://github.com/splunk/lightproto</url>
+    <url>https://github.com/streamnative/lightproto</url>
     <description>Protobuf compatible code generator</description>
 
     <organization>
-        <name>Splunk</name>
-        <url>https://splunk.com</url>
+        <name>StreamNative</name>
+        <url>https://streamnative.io</url>
     </organization>
     <inceptionYear>2020</inceptionYear>
 
     <developers>
         <developer>
-            <organization>Splunk Inc.</organization>
-            <organizationUrl>https://splunk.com/</organizationUrl>
+            <organization>StreamNative</organization>
+            <organizationUrl>https://streamnative.io/</organizationUrl>
         </developer>
     </developers>
 
     <scm>
-        <url>https://github.com/splunk/lightproto</url>
-        <connection>scm:git:https://github.com/splunk/lightproto.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com:splunk/lightproto.git</developerConnection>
+        <url>https://github.com/streamnative/lightproto</url>
+        <connection>scm:git:https://github.com/streamnative/lightproto.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com:streamnative/lightproto.git</developerConnection>
     </scm>
 
     <licenses>
@@ -59,23 +59,23 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <protobuf.version>3.13.0</protobuf.version>
+        <protobuf.version>4.34.0</protobuf.version>
         <protoc.version>${protobuf.version}</protoc.version>
 
         <protostuff.version>1.7.2</protostuff.version>
         <slf4j.version>1.7.25</slf4j.version>
         <junit.version>5.7.0</junit.version>
         <guava.version>30.1-jre</guava.version>
-        <netty.version>4.1.56.Final</netty.version>
+        <netty.version>4.1.131.Final</netty.version>
         <jibx.version>1.3.3</jibx.version>
         <roaster.version>2.22.2.Final</roaster.version>
 
-        <jmh.version>1.27</jmh.version>
+        <jmh.version>1.37</jmh.version>
 
-        <maven-compiler.version>3.8.1</maven-compiler.version>
+        <maven-compiler.version>3.11.0</maven-compiler.version>
         <maven-surefire.version>3.0.0-M5</maven-surefire.version>
         <maven-source-plugin.version>3.2.1</maven-source-plugin.version>
-        <maven-plugin-plugin.version>3.6.0</maven-plugin-plugin.version>
+        <maven-plugin-plugin.version>3.10.2</maven-plugin-plugin.version>
         <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
         <maven-javadoc-plugin.version>3.2.0</maven-javadoc-plugin.version>
         <nexus-staging-maven-plugin.version>1.6.8</nexus-staging-maven-plugin.version>
@@ -98,9 +98,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven-compiler.version}</version>
                 <configuration>
-                    <compilerVersion>1.8</compilerVersion>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <release>17</release>
                 </configuration>
             </plugin>
 
