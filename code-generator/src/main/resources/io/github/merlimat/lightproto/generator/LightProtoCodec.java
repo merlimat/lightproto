@@ -20,7 +20,7 @@ import io.netty.buffer.ByteBufUtil;
 
 import java.nio.charset.StandardCharsets;
 
-@SuppressWarnings("sunapi")
+@SuppressWarnings({"sunapi", "removal"})
 class LightProtoCodec {
 
     static final sun.misc.Unsafe UNSAFE;
