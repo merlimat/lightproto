@@ -21,14 +21,21 @@ public class ProtoMethodDescriptor {
     private final String outputType;
     private final boolean clientStreaming;
     private final boolean serverStreaming;
+    private final String doc;
 
     public ProtoMethodDescriptor(String name, String inputType, String outputType,
                                  boolean clientStreaming, boolean serverStreaming) {
+        this(name, inputType, outputType, clientStreaming, serverStreaming, null);
+    }
+
+    public ProtoMethodDescriptor(String name, String inputType, String outputType,
+                                 boolean clientStreaming, boolean serverStreaming, String doc) {
         this.name = name;
         this.inputType = inputType;
         this.outputType = outputType;
         this.clientStreaming = clientStreaming;
         this.serverStreaming = serverStreaming;
+        this.doc = doc;
     }
 
     public String getName() {
@@ -49,5 +56,9 @@ public class ProtoMethodDescriptor {
 
     public boolean isServerStreaming() {
         return serverStreaming;
+    }
+
+    public String getDoc() {
+        return doc;
     }
 }

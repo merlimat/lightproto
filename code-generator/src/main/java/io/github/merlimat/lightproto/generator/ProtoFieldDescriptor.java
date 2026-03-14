@@ -15,8 +15,6 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -49,7 +47,7 @@ public class ProtoFieldDescriptor {
     private final boolean defaultValueSet;
     private final String defaultValue;        // Raw default value (e.g. "hello" for strings, null for no-default)
     private final String defaultValueAsString; // Default value as code literal (e.g. "5" for int, "true" for bool)
-    private final List<String> docs;
+    private final String doc;
     private final int oneofIndex;    // Index into message's oneof list, or -1 if not in a oneof
     private final String oneofName;  // Name of the containing oneof, or null
     private final boolean mapField;
@@ -61,30 +59,30 @@ public class ProtoFieldDescriptor {
     public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
                                 Label label, boolean packed,
                                 boolean defaultValueSet, String defaultValue,
-                                String defaultValueAsString, List<String> docs) {
+                                String defaultValueAsString, String doc) {
         this(name, number, protoType, javaType, label, packed,
-                defaultValueSet, defaultValue, defaultValueAsString, docs, -1, null);
+                defaultValueSet, defaultValue, defaultValueAsString, doc, -1, null);
     }
 
     public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
                                 Label label, boolean packed,
                                 boolean defaultValueSet, String defaultValue,
-                                String defaultValueAsString, List<String> docs,
+                                String defaultValueAsString, String doc,
                                 int oneofIndex, String oneofName) {
         this(name, number, protoType, javaType, label, packed,
-                defaultValueSet, defaultValue, defaultValueAsString, docs,
+                defaultValueSet, defaultValue, defaultValueAsString, doc,
                 oneofIndex, oneofName, false, null, null);
     }
 
     public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
                                 Label label, boolean packed,
                                 boolean defaultValueSet, String defaultValue,
-                                String defaultValueAsString, List<String> docs,
+                                String defaultValueAsString, String doc,
                                 int oneofIndex, String oneofName,
                                 boolean mapField, ProtoFieldDescriptor mapKeyField,
                                 ProtoFieldDescriptor mapValueField) {
         this(name, number, protoType, javaType, label, packed,
-                defaultValueSet, defaultValue, defaultValueAsString, docs,
+                defaultValueSet, defaultValue, defaultValueAsString, doc,
                 oneofIndex, oneofName, mapField, mapKeyField, mapValueField,
                 false, false);
     }
@@ -92,7 +90,7 @@ public class ProtoFieldDescriptor {
     public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
                                 Label label, boolean packed,
                                 boolean defaultValueSet, String defaultValue,
-                                String defaultValueAsString, List<String> docs,
+                                String defaultValueAsString, String doc,
                                 int oneofIndex, String oneofName,
                                 boolean mapField, ProtoFieldDescriptor mapKeyField,
                                 ProtoFieldDescriptor mapValueField,
@@ -106,7 +104,7 @@ public class ProtoFieldDescriptor {
         this.defaultValueSet = defaultValueSet;
         this.defaultValue = defaultValue;
         this.defaultValueAsString = defaultValueAsString;
-        this.docs = docs != null ? docs : Collections.emptyList();
+        this.doc = doc;
         this.oneofIndex = oneofIndex;
         this.oneofName = oneofName;
         this.mapField = mapField;
@@ -192,8 +190,8 @@ public class ProtoFieldDescriptor {
         return defaultValueAsString;
     }
 
-    public List<String> getDocs() {
-        return docs;
+    public String getDoc() {
+        return doc;
     }
 
     public int getOneofIndex() {

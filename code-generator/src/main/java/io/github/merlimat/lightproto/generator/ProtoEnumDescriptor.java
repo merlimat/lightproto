@@ -20,10 +20,16 @@ import java.util.List;
 public class ProtoEnumDescriptor {
     private final String name;
     private final List<Value> values;
+    private final String doc;
 
     public ProtoEnumDescriptor(String name, List<Value> values) {
+        this(name, values, null);
+    }
+
+    public ProtoEnumDescriptor(String name, List<Value> values, String doc) {
         this.name = name;
         this.values = values;
+        this.doc = doc;
     }
 
     public String getName() {
@@ -34,13 +40,23 @@ public class ProtoEnumDescriptor {
         return values;
     }
 
+    public String getDoc() {
+        return doc;
+    }
+
     public static class Value {
         private final String name;
         private final int number;
+        private final String doc;
 
         public Value(String name, int number) {
+            this(name, number, null);
+        }
+
+        public Value(String name, int number, String doc) {
             this.name = name;
             this.number = number;
+            this.doc = doc;
         }
 
         public String getName() {
@@ -49,6 +65,10 @@ public class ProtoEnumDescriptor {
 
         public int getNumber() {
             return number;
+        }
+
+        public String getDoc() {
+            return doc;
         }
     }
 }

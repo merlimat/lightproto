@@ -79,7 +79,10 @@ public abstract class LightProtoField {
     }
 
     public void docs(PrintWriter w) {
-        field.getDocs().forEach(d -> w.format("        // %s\n", d));
+        String doc = field.getDoc();
+        if (doc != null && !doc.isEmpty()) {
+            Util.writeJavadoc(w, doc, "        ");
+        }
     }
 
     abstract public void declaration(PrintWriter w);
@@ -97,6 +100,7 @@ public abstract class LightProtoField {
         if (field.hasImplicitPresence()) {
             return; // No has() for proto3 implicit presence fields
         }
+        w.format("        /** Returns whether the {@code %s} field is set. */\n", field.getName());
         w.format("        public boolean %s() {\n", Util.camelCase("has", field.getName()));
         if (field.isOneofMember()) {
             w.format("            return _%sCase == %s;\n", Util.camelCase(field.getOneofName()), fieldNumber());
@@ -109,6 +113,7 @@ public abstract class LightProtoField {
     abstract public void clear(PrintWriter w);
 
     public void fieldClear(PrintWriter w, String enclosingType) {
+        w.format("        /** Clear the {@code %s} field. */\n", field.getName());
         w.format("        public %s %s() {\n", enclosingType, Util.camelCase("clear", field.getName()));
         if (field.isOneofMember()) {
             w.format("            if (_%sCase == %s) {\n", Util.camelCase(field.getOneofName()), fieldNumber());

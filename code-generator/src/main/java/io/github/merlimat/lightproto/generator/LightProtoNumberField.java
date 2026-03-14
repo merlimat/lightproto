@@ -167,6 +167,7 @@ public class LightProtoNumberField extends LightProtoField {
     }
 
     public void getter(PrintWriter w) {
+        w.format("        /** Returns the value of the {@code %s} field. */\n", field.getName());
         w.format("        public %s %s() {\n", field.getJavaType(), Util.camelCase("get", field.getName()));
         if (!field.hasImplicitPresence() && !field.isDefaultValueSet()) {
             w.format("            if (!%s()) {\n", Util.camelCase("has", ccName));
@@ -190,6 +191,7 @@ public class LightProtoNumberField extends LightProtoField {
 
     @Override
     public void setter(PrintWriter w, String enclosingType) {
+        w.format("/** Set the {@code %s} field. */\n", field.getName());
         w.format("public %s %s(%s %s) {\n", enclosingType, Util.camelCase("set", field.getName()), field.getJavaType(), camelCase(field.getName()));
         w.format("    this.%s = %s;\n", camelCase(field.getName()), camelCase(field.getName()));
         writeSetPresence(w);

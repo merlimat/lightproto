@@ -36,9 +36,11 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
 
     @Override
     public void getter(PrintWriter w) {
+        w.format("/** Returns the number of elements in the {@code %s} list. */\n", field.getName());
         w.format("public int %s() {\n", Util.camelCase("get", pluralName, "count"));
         w.format("    return _%sCount;\n", pluralName);
         w.format("}\n");
+        w.format("/** Returns the element at the given index in the {@code %s} list. */\n", field.getName());
         w.format("public %s %s(int idx) {\n", field.getJavaType(), Util.camelCase("get", singularName, "at"));
         w.format("    if (idx < 0 || idx >= _%sCount) {\n", pluralName);
         w.format("        throw new IndexOutOfBoundsException(\"Index \" + idx + \" is out of the list size (\" + _%sCount + \") for field '%s'\");\n", pluralName, field.getName());
@@ -46,6 +48,11 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
         w.format("    return %s[idx];\n", pluralName);
         w.format("}\n");
 
+        w.format("/**\n");
+        w.format(" * Returns the {@code %s} as a new list.\n", field.getName());
+        w.format(" * <p>Note: this method creates a new list on every call. For indexed access, prefer\n");
+        w.format(" * {@code %s(int)} instead.\n", Util.camelCase("get", singularName, "at"));
+        w.format(" */\n");
         w.format("public java.util.List<%s> %s() {\n", field.getJavaType(), Util.camelCase("get", pluralName, "list"));
         w.format("    if (_%sCount == 0) {\n", pluralName);
         w.format("        return java.util.Collections.emptyList();\n");
@@ -82,6 +89,7 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
 
     @Override
     public void setter(PrintWriter w, String enclosingType) {
+        w.format("/** Adds a new element to the {@code %s} list, returning the sub-message for population. */\n", field.getName());
         w.format("public %s %s() {\n", field.getJavaType(), Util.camelCase("add", singularName));
         w.format("    if (%s == null) {\n", pluralName);
         w.format("        %s = new %s[4];\n", pluralName, field.getJavaType());
@@ -97,6 +105,7 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
         w.format("}\n");
 
 
+        w.format("/** Copies all elements into the {@code %s} list. */\n", field.getName());
         w.format("public %s %s(Iterable<%s> %s) {\n", enclosingType, Util.camelCase("addAll", pluralName), field.getJavaType(), pluralName);
         w.format("    for (%s _o : %s) {\n", field.getJavaType(), pluralName);
         w.format("        %s().copyFrom(_o);\n", Util.camelCase("add", singularName));

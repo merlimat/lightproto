@@ -39,6 +39,7 @@ public class LightProtoService {
                 : service.getProtoPackage() + "." + serviceName;
         List<ProtoMethodDescriptor> methods = service.getMethods();
 
+        Util.writeJavadoc(w, service.getDoc(), "");
         w.format("public final class %s {\n", grpcClassName);
         w.format("    private %s() {}\n\n", grpcClassName);
 
@@ -177,6 +178,7 @@ public class LightProtoService {
             String outputType = m.getOutputType();
             String getterName = "get" + m.getName() + "Method";
 
+            Util.writeJavadoc(w, m.getDoc(), "        ");
             if (isClientStreaming(m)) {
                 w.format("        default io.grpc.stub.StreamObserver<%s> %s(\n", inputType, ccMethod);
                 w.format("                io.grpc.stub.StreamObserver<%s> responseObserver) {\n", outputType);
@@ -231,6 +233,7 @@ public class LightProtoService {
             String outputType = m.getOutputType();
             String getterName = "get" + m.getName() + "Method";
 
+            Util.writeJavadoc(w, m.getDoc(), "        ");
             if (isClientStreaming(m)) {
                 // client-streaming or bidi: returns StreamObserver<Req>
                 w.format("        public io.grpc.stub.StreamObserver<%s> %s(\n", inputType, ccMethod);
@@ -293,6 +296,7 @@ public class LightProtoService {
             String outputType = m.getOutputType();
             String getterName = "get" + m.getName() + "Method";
 
+            Util.writeJavadoc(w, m.getDoc(), "        ");
             if (m.isServerStreaming()) {
                 w.format("        public java.util.Iterator<%s> %s(%s request) {\n",
                         outputType, ccMethod, inputType);

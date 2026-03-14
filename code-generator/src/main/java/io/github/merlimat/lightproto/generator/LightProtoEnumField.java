@@ -34,6 +34,7 @@ public class LightProtoEnumField extends LightProtoNumberField {
 
     @Override
     public void getter(PrintWriter w) {
+        w.format("        /** Returns the value of the {@code %s} field. */\n", field.getName());
         w.format("        public %s %s() {\n", field.getJavaType(), Util.camelCase("get", field.getName()));
         if (!field.hasImplicitPresence() && !field.isDefaultValueSet()) {
             w.format("            if (!%s()) {\n", Util.camelCase("has", ccName));

@@ -82,6 +82,7 @@ public abstract class GenerateLightProtoTask extends DefaultTask {
             command.add(protocFile.getAbsolutePath());
             command.add("--descriptor_set_out=" + descriptorSetFile.getAbsolutePath());
             command.add("--include_imports");
+            command.add("--include_source_info");
             command.add("--proto_path=" + protoDir.getAbsolutePath());
             for (File extraPath : getExtraProtoPaths().getFiles()) {
                 command.add("--proto_path=" + extraPath.getAbsolutePath());

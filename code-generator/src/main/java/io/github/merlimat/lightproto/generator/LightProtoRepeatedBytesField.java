@@ -44,10 +44,12 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
 
     @Override
     public void getter(PrintWriter w) {
+        w.format("/** Returns the number of elements in the {@code %s} list. */\n", field.getName());
         w.format("public int %s() {\n", Util.camelCase("get", pluralName, "count"));
         w.format("    return _%sCount;\n", pluralName);
         w.format("}\n");
 
+        w.format("/** Returns the size in bytes of the element at the given index in the {@code %s} list. */\n", field.getName());
         w.format("public int %s(int idx) {\n", Util.camelCase("get", singularName, "size", "at"));
         w.format("    if (idx < 0 || idx >= _%sCount) {\n", pluralName);
         w.format("        throw new IndexOutOfBoundsException(\"Index \" + idx + \" is out of the list size (\" + _%sCount + \") for field '%s'\");\n", pluralName, field.getName());
@@ -56,6 +58,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("}\n");
 
 
+        w.format("/** Returns the element at the given index in the {@code %s} list as a byte array. */\n", field.getName());
         w.format("public byte[] %s(int idx) {\n", Util.camelCase("get", singularName, "at"));
         w.format("    io.netty.buffer.ByteBuf _b = %s(idx);\n", Util.camelCase("get", singularName, "slice", "at"));
         w.format("    byte[] res = new byte[_b.readableBytes()];\n");
@@ -63,6 +66,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("    return res;\n");
         w.format("}\n");
 
+        w.format("/** Returns the element at the given index in the {@code %s} list as a ByteBuf slice. */\n", field.getName());
         w.format("public io.netty.buffer.ByteBuf %s(int idx) {\n", Util.camelCase("get", singularName, "slice", "at"));
         w.format("    if (idx < 0 || idx >= _%sCount) {\n", pluralName);
         w.format("        throw new IndexOutOfBoundsException(\"Index \" + idx + \" is out of the list size (\" + _%sCount + \") for field '%s'\");\n", pluralName, field.getName());
@@ -94,10 +98,12 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
 
     @Override
     public void setter(PrintWriter w, String enclosingType) {
+        w.format("/** Adds a value to the {@code %s} list from a byte array. */\n", field.getName());
         w.format("public void %s(byte[] %s) {\n", Util.camelCase("add", singularName), singularName);
         w.format("    %s(io.netty.buffer.Unpooled.wrappedBuffer(%s));\n", Util.camelCase("add", singularName), singularName);
         w.format("}\n");
 
+        w.format("/** Adds a value to the {@code %s} list from a ByteBuf. */\n", field.getName());
         w.format("public void %s(io.netty.buffer.ByteBuf %s) {\n", Util.camelCase("add", singularName), singularName);
         w.format("    LightProtoCodec.BytesHolder _bh = _%sBytesHolder();\n", Util.camelCase("new", singularName));
         w.format("    _cachedSize = -1;\n");

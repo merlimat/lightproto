@@ -30,6 +30,7 @@ public class LightProtoMessageField extends LightProtoField {
 
     @Override
     public void setter(PrintWriter w, String enclosingType) {
+        w.format("/** Returns the {@code %s} sub-message, creating it if not already set. */\n", field.getName());
         w.format("public %s %s() {\n", field.getJavaType(), Util.camelCase("set", ccName));
         w.format("    if (%s == null) {\n", ccName);
         w.format("        %s = new %s();\n", ccName, field.getJavaType());
@@ -46,6 +47,7 @@ public class LightProtoMessageField extends LightProtoField {
     }
 
     public void getter(PrintWriter w) {
+        w.format("/** Returns the value of the {@code %s} field. */\n", field.getName());
         w.format("public %s %s() {\n", field.getJavaType(), Util.camelCase("get", field.getName()));
         w.format("    if (!%s()) {\n", Util.camelCase("has", ccName));
         w.format("        throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());

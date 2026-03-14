@@ -3,19 +3,30 @@ package io.github.merlimat.lightproto.tests;
 
 option java_outer_classname = "GrpcTestProtos";
 
+// A request message for the test gRPC service.
 message GrpcRequest {
+    // The name to include in the request.
     string name = 1;
+    // A numeric value for the request.
     int32 value = 2;
 }
 
+// A response message from the test gRPC service.
 message GrpcResponse {
+    // The response message text.
     string message = 1;
+    // The computed result value.
     int32 result = 2;
 }
 
+// A test service with all four RPC patterns.
 service TestService {
+    // A simple unary RPC.
     rpc Unary (GrpcRequest) returns (GrpcResponse);
+    // A server-side streaming RPC.
     rpc ServerStream (GrpcRequest) returns (stream GrpcResponse);
+    // A client-side streaming RPC.
     rpc ClientStream (stream GrpcRequest) returns (GrpcResponse);
+    // A bidirectional streaming RPC.
     rpc BidiStream (stream GrpcRequest) returns (stream GrpcResponse);
 }

@@ -15,6 +15,8 @@
  */
 package io.github.merlimat.lightproto.generator;
 
+import java.io.PrintWriter;
+
 import org.jibx.schema.codegen.extend.DefaultNameConverter;
 import org.jibx.schema.codegen.extend.NameConverter;
 
@@ -72,5 +74,20 @@ public class Util {
 
     public static String singular(String s) {
         return nameTools.depluralize(s);
+    }
+
+    public static void writeJavadoc(PrintWriter w, String doc, String indent) {
+        if (doc == null || doc.isEmpty()) {
+            return;
+        }
+        w.format("%s/**\n", indent);
+        for (String line : doc.split("\n")) {
+            if (line.isEmpty()) {
+                w.format("%s *\n", indent);
+            } else {
+                w.format("%s * %s\n", indent, line);
+            }
+        }
+        w.format("%s */\n", indent);
     }
 }

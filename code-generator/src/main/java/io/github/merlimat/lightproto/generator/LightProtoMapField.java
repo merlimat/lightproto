@@ -126,12 +126,14 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
     @Override
     public void getter(PrintWriter w) {
         // getCount()
+        w.format("/** Returns the number of entries in the {@code %s} map. */\n", field.getName());
         w.format("public int %s() {\n", Util.camelCase("get", ccName, "count"));
         w.format("    return _%sCount;\n", ccName);
         w.format("}\n");
 
         // get(key) - returns value, throws if not found
         String valueReturnType = isBytesValue() ? "byte[]" : valueField.getJavaType();
+        w.format("/** Returns the value for the given key in the {@code %s} map. */\n", field.getName());
         w.format("public %s %s(%s key) {\n", valueReturnType, Util.camelCase("get", ccName), keyField.getJavaType());
         w.format("    int _idx = _find%sKeyIndex(key);\n", Util.camelCaseFirstUpper(ccName));
         w.format("    if (_idx < 0) {\n");
@@ -141,6 +143,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         w.format("}\n");
 
         // forEach(BiConsumer)
+        w.format("/** Iterates over all entries in the {@code %s} map. */\n", field.getName());
         w.format("public void %s(java.util.function.BiConsumer<%s, %s> consumer) {\n",
                 Util.camelCase("forEach", ccName), keyBoxed(), valueBoxed());
         w.format("    for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
@@ -289,6 +292,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
     public void setter(PrintWriter w, String enclosingType) {
         if (isMessageValue()) {
             // put(key) -> returns message for population
+            w.format("/** Puts an entry in the {@code %s} map, returning the value message for population. */\n", field.getName());
             w.format("public %s %s(%s key) {\n",
                     valueField.getJavaType(), Util.camelCase("put", ccName), keyField.getJavaType());
             w.format("    int _idx = _find%sKeyIndex(key);\n", Util.camelCaseFirstUpper(ccName));
@@ -310,6 +314,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         } else {
             // put(key, value) -> void
             String valueParamType = isBytesValue() ? "byte[]" : valueField.getJavaType();
+            w.format("/** Puts an entry in the {@code %s} map. */\n", field.getName());
             w.format("public void %s(%s key, %s value) {\n",
                     Util.camelCase("put", ccName), keyField.getJavaType(), valueParamType);
             w.format("    int _idx = _find%sKeyIndex(key);\n", Util.camelCaseFirstUpper(ccName));

@@ -67,9 +67,11 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
     @Override
     public void getter(PrintWriter w) {
         w.format("private static final int %s_PACKED = (%s << LightProtoCodec.TAG_TYPE_BITS) | LightProtoCodec.WIRETYPE_LENGTH_DELIMITED;\n", tagName(), fieldNumber());
+        w.format("/** Returns the number of elements in the {@code %s} list. */\n", field.getName());
         w.format("public int %s() {\n", Util.camelCase("get", pluralName, "count"));
         w.format("    return _%sCount;\n", pluralName);
         w.format("}\n");
+        w.format("/** Returns the element at the given index in the {@code %s} list. */\n", field.getName());
         w.format("public %s %s(int idx) {\n", field.getJavaType(), Util.camelCase("get", singularName, "at"));
         w.format("    if (idx < 0 || idx >= _%sCount) {\n", pluralName);
         w.format("        throw new IndexOutOfBoundsException(\"Index \" + idx + \" is out of the list size (\" + _%sCount + \") for field '%s'\");\n", pluralName, field.getName());
@@ -108,6 +110,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
 
     @Override
     public void setter(PrintWriter w, String enclosingType) {
+        w.format("/** Adds a value to the {@code %s} list. */\n", field.getName());
         w.format("public void %s(%s %s) {\n", Util.camelCase("add", singularName), field.getJavaType(), singularName);
         w.format("    if (%s == null) {\n", pluralName);
         w.format("        %s = new %s[4];\n", pluralName, field.getJavaType());

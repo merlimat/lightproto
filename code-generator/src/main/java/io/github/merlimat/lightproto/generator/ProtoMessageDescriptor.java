@@ -24,12 +24,13 @@ public class ProtoMessageDescriptor {
     private final List<ProtoMessageDescriptor> nestedMessages;
     private final List<ProtoEnumDescriptor> nestedEnums;
     private final List<ProtoOneofDescriptor> oneofs;
+    private final String doc;
 
     public ProtoMessageDescriptor(String name,
                                   List<ProtoFieldDescriptor> fields,
                                   List<ProtoMessageDescriptor> nestedMessages,
                                   List<ProtoEnumDescriptor> nestedEnums) {
-        this(name, fields, nestedMessages, nestedEnums, Collections.emptyList());
+        this(name, fields, nestedMessages, nestedEnums, Collections.emptyList(), null);
     }
 
     public ProtoMessageDescriptor(String name,
@@ -37,11 +38,21 @@ public class ProtoMessageDescriptor {
                                   List<ProtoMessageDescriptor> nestedMessages,
                                   List<ProtoEnumDescriptor> nestedEnums,
                                   List<ProtoOneofDescriptor> oneofs) {
+        this(name, fields, nestedMessages, nestedEnums, oneofs, null);
+    }
+
+    public ProtoMessageDescriptor(String name,
+                                  List<ProtoFieldDescriptor> fields,
+                                  List<ProtoMessageDescriptor> nestedMessages,
+                                  List<ProtoEnumDescriptor> nestedEnums,
+                                  List<ProtoOneofDescriptor> oneofs,
+                                  String doc) {
         this.name = name;
         this.fields = fields;
         this.nestedMessages = nestedMessages;
         this.nestedEnums = nestedEnums;
         this.oneofs = oneofs;
+        this.doc = doc;
     }
 
     public String getName() {
@@ -66,5 +77,9 @@ public class ProtoMessageDescriptor {
 
     public List<ProtoOneofDescriptor> getOneofs() {
         return oneofs;
+    }
+
+    public String getDoc() {
+        return doc;
     }
 }

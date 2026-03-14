@@ -21,11 +21,17 @@ public class ProtoServiceDescriptor {
     private final String name;
     private final String protoPackage;
     private final List<ProtoMethodDescriptor> methods;
+    private final String doc;
 
     public ProtoServiceDescriptor(String name, String protoPackage, List<ProtoMethodDescriptor> methods) {
+        this(name, protoPackage, methods, null);
+    }
+
+    public ProtoServiceDescriptor(String name, String protoPackage, List<ProtoMethodDescriptor> methods, String doc) {
         this.name = name;
         this.protoPackage = protoPackage;
         this.methods = methods;
+        this.doc = doc;
     }
 
     public String getName() {
@@ -38,5 +44,9 @@ public class ProtoServiceDescriptor {
 
     public List<ProtoMethodDescriptor> getMethods() {
         return methods;
+    }
+
+    public String getDoc() {
+        return doc;
     }
 }

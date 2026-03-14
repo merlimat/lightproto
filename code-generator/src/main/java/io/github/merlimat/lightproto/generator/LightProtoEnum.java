@@ -29,9 +29,12 @@ public class LightProtoEnum {
     }
 
     public void generate(PrintWriter w) {
+        Util.writeJavadoc(w, eg.getDoc(), "    ");
         w.format("    public enum %s {\n", eg.getName());
-        eg.getSortedValues().forEach(v ->
-                w.format("        %s(%d),\n", v.getName(), v.getNumber()));
+        eg.getSortedValues().forEach(v -> {
+                Util.writeJavadoc(w, v.getDoc(), "        ");
+                w.format("        %s(%d),\n", v.getName(), v.getNumber());
+        });
         w.println("        ;");
         w.println("        private final int value;");
         w.format("        private %s(int value) {\n", eg.getName());

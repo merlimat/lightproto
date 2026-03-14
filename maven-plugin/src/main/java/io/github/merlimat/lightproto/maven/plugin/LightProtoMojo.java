@@ -97,6 +97,7 @@ public class LightProtoMojo extends AbstractMojo {
             command.add(protocFile.getAbsolutePath());
             command.add("--descriptor_set_out=" + descriptorSetFile.getAbsolutePath());
             command.add("--include_imports");
+            command.add("--include_source_info");
             command.add("--proto_path=" + protoDir.getAbsolutePath());
             if (extraProtoPaths != null) {
                 for (File extraPath : extraProtoPaths) {

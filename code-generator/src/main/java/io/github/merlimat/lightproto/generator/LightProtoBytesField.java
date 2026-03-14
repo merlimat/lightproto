@@ -44,11 +44,13 @@ public class LightProtoBytesField extends LightProtoField {
 
     @Override
     public void setter(PrintWriter w, String enclosingType) {
+        w.format("/** Set the {@code %s} field from a byte array. */\n", field.getName());
         w.format("public %s %s(byte[] %s) {\n", enclosingType, Util.camelCase("set", ccName), ccName);
         w.format("    %s(io.netty.buffer.Unpooled.wrappedBuffer(%s));\n", Util.camelCase("set", ccName), ccName);
         w.format("    return this;\n");
         w.format("}\n");
 
+        w.format("/** Set the {@code %s} field from a ByteBuf. */\n", field.getName());
         w.format("public %s %s(io.netty.buffer.ByteBuf %s) {\n", enclosingType, Util.camelCase("set", ccName), ccName);
         w.format("    this.%s = %s;\n", ccName, ccName);
         writeSetPresence(w);
@@ -61,6 +63,7 @@ public class LightProtoBytesField extends LightProtoField {
 
     @Override
     public void getter(PrintWriter w) {
+        w.format("/** Returns the size in bytes of the {@code %s} field. */\n", field.getName());
         w.format("public int %s() {\n", Util.camelCase("get", ccName, "size"));
         if (field.hasImplicitPresence()) {
             w.format("    if (_%sLen < 0) { return 0; }\n", ccName);
@@ -72,6 +75,7 @@ public class LightProtoBytesField extends LightProtoField {
         w.format("    return _%sLen;\n", ccName);
         w.format("}\n");
 
+        w.format("/** Returns the {@code %s} field as a byte array. */\n", field.getName());
         w.format("public byte[] %s() {\n", Util.camelCase("get", ccName));
         if (field.hasImplicitPresence()) {
             w.format("    if (_%sLen < 0) { return new byte[0]; }\n", ccName);
@@ -82,6 +86,7 @@ public class LightProtoBytesField extends LightProtoField {
         w.format("    return res;\n");
         w.format("}\n");
 
+        w.format("/** Returns the {@code %s} field as a ByteBuf slice. */\n", field.getName());
         w.format("public io.netty.buffer.ByteBuf %s() {\n", Util.camelCase("get", ccName, "slice"));
         if (field.hasImplicitPresence()) {
             w.format("    if (_%sLen < 0) { return io.netty.buffer.Unpooled.EMPTY_BUFFER; }\n", ccName);

@@ -57,6 +57,7 @@ public class LightProtoMessage {
     }
 
     public void generate(PrintWriter w) {
+        Util.writeJavadoc(w, message.getDoc(), "    ");
         w.format("    public %s final class %s implements LightProtoCodec.LightProtoMessage {\n", isNested ? "static" : "", message.getName());
 
         enums.forEach(e -> e.generate(w));
@@ -81,6 +82,7 @@ public class LightProtoMessage {
         generateClear(w);
         generateCopyFrom(w);
 
+        w.println("        /** Serialize this message to a new byte array. */");
         w.println("        public byte[] toByteArray() {");
         w.println("            byte[] a = new byte[getSerializedSize()];");
         w.println("            io.netty.buffer.ByteBuf b = io.netty.buffer.Unpooled.wrappedBuffer(a).writerIndex(0);");
@@ -88,6 +90,7 @@ public class LightProtoMessage {
         w.println("            return a;");
         w.println("        }");
 
+        w.println("        /** Deserialize this message from a byte array. */");
         w.println("        public void parseFrom(byte[] a) {");
         w.println("            io.netty.buffer.ByteBuf b = io.netty.buffer.Unpooled.wrappedBuffer(a);");
         w.println("            this.parseFrom(b, b.readableBytes());");
@@ -100,6 +103,11 @@ public class LightProtoMessage {
     }
 
     private void generateParseFrom(PrintWriter w) {
+        w.println("        /**");
+        w.println("         * Deserialize this message from the given buffer.");
+        w.println("         * @param _buffer the buffer to read from");
+        w.println("         * @param _size the number of bytes to read");
+        w.println("         */");
         w.format("        @Override public void parseFrom(io.netty.buffer.ByteBuf _buffer, int _size) {\n");
         w.format("            clear();\n");
         w.format("            int _endIdx = _buffer.readerIndex() + _size;\n");
@@ -146,6 +154,7 @@ public class LightProtoMessage {
     }
 
     private void generateClear(PrintWriter w) {
+        w.println("        /** Reset all fields to their default values, allowing this instance to be reused. */");
         w.format("        public %s clear() {\n", message.getName());
         for (LightProtoField f : fields) {
             f.clear(w);
@@ -165,6 +174,7 @@ public class LightProtoMessage {
     }
 
     private void generateCopyFrom(PrintWriter w) {
+        w.println("        /** Copy all fields from another message of the same type. */");
         w.format("public %s copyFrom(%s _other) {\n", message.getName(), message.getName());
         w.format("            _cachedSize = -1;\n");
         for (LightProtoField f : fields) {
@@ -185,6 +195,10 @@ public class LightProtoMessage {
     }
 
     private void generateSerialize(PrintWriter w) {
+        w.println("        /**");
+        w.println("         * Serialize this message to the given buffer.");
+        w.println("         * @return the number of bytes written");
+        w.println("         */");
         w.format("        @Override public int writeTo(io.netty.buffer.ByteBuf _b) {\n");
         if (hasRequiredFields()) {
             w.format("            checkRequiredFields();\n");
@@ -220,6 +234,7 @@ public class LightProtoMessage {
     }
 
     private void generateGetSerializedSize(PrintWriter w) {
+        w.println("        /** Returns the serialized size of this message in bytes. */");
         w.format("@Override public int getSerializedSize() {\n");
         w.format("    if (_cachedSize > -1) {\n");
         w.format("        return _cachedSize;\n");

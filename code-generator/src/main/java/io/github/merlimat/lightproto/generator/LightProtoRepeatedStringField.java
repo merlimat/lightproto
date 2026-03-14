@@ -44,9 +44,11 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
 
     @Override
     public void getter(PrintWriter w) {
+        w.format("/** Returns the number of elements in the {@code %s} list. */\n", field.getName());
         w.format("public int %s() {\n", Util.camelCase("get", pluralName, "count"));
         w.format("    return _%sCount;\n", pluralName);
         w.format("}\n");
+        w.format("/** Returns the element at the given index in the {@code %s} list. */\n", field.getName());
         w.format("public %s %s(int idx) {\n", field.getJavaType(), Util.camelCase("get", singularName, "at"));
         w.format("    if (idx < 0 || idx >= _%sCount) {\n", pluralName);
         w.format("        throw new IndexOutOfBoundsException(\"Index \" + idx + \" is out of the list size (\" + _%sCount + \") for field '%s'\");\n", pluralName, field.getName());
@@ -58,6 +60,11 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
         w.format("    return _sh.s;\n");
         w.format("}\n");
 
+        w.format("/**\n");
+        w.format(" * Returns the {@code %s} as a new list.\n", field.getName());
+        w.format(" * <p>Note: this method creates a new list on every call. For indexed access, prefer\n");
+        w.format(" * {@code %s(int)} instead.\n", Util.camelCase("get", singularName, "at"));
+        w.format(" */\n");
         w.format("public java.util.List<String> %s() {\n", Util.camelCase("get", pluralName, "list"));
         w.format("    if (_%sCount == 0) {\n", pluralName);
         w.format("        return java.util.Collections.emptyList();\n");
@@ -103,6 +110,7 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
 
     @Override
     public void setter(PrintWriter w, String enclosingType) {
+        w.format("/** Adds a value to the {@code %s} list. */\n", field.getName());
         w.format("public void %s(String %s) {\n", Util.camelCase("add", singularName), singularName);
         w.format("    LightProtoCodec.StringHolder _sh = _%sStringHolder();\n", Util.camelCase("new", singularName));
         w.format("    _cachedSize = -1;\n");
@@ -111,6 +119,7 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
         w.format("    _sh.len = LightProtoCodec.computeStringUTF8Size(_sh.s);\n");
         w.format("}\n");
 
+        w.format("/** Adds all values to the {@code %s} list. */\n", field.getName());
         w.format("public %s %s(Iterable<String> %s) {\n", enclosingType, Util.camelCase("addAll", pluralName), pluralName);
         w.format("    for (String _s : %s) {\n", pluralName);
         w.format("        %s(_s);\n", Util.camelCase("add", singularName));

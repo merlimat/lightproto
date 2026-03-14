@@ -23,8 +23,10 @@ import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.DescriptorProtos.MethodDescriptorProto;
 import com.google.protobuf.DescriptorProtos.OneofDescriptorProto;
 import com.google.protobuf.DescriptorProtos.ServiceDescriptorProto;
+import com.google.protobuf.DescriptorProtos.SourceCodeInfo;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -102,19 +104,66 @@ public class DescriptorConverter {
 
         TypeResolver resolver = new TypeResolver(javaPackage, typeRegistry);
 
-        List<ProtoEnumDescriptor> enums = fileProto.getEnumTypeList().stream()
-                .map(DescriptorConverter::convertEnum)
-                .collect(Collectors.toList());
+        // Build comments map from SourceCodeInfo
+        Map<List<Integer>, String> comments = buildCommentsMap(fileProto);
 
-        List<ProtoMessageDescriptor> messages = fileProto.getMessageTypeList().stream()
-                .map(m -> convertMessage(m, syntax, resolver))
-                .collect(Collectors.toList());
+        List<ProtoEnumDescriptor> enums = new ArrayList<>();
+        for (int i = 0; i < fileProto.getEnumTypeCount(); i++) {
+            enums.add(convertEnum(fileProto.getEnumType(i), comments, new int[]{5, i}));
+        }
 
-        List<ProtoServiceDescriptor> services = fileProto.getServiceList().stream()
-                .map(s -> convertService(s, protoPackage, resolver))
-                .collect(Collectors.toList());
+        List<ProtoMessageDescriptor> messages = new ArrayList<>();
+        for (int i = 0; i < fileProto.getMessageTypeCount(); i++) {
+            messages.add(convertMessage(fileProto.getMessageType(i), syntax, resolver,
+                    comments, new int[]{4, i}));
+        }
+
+        List<ProtoServiceDescriptor> services = new ArrayList<>();
+        for (int i = 0; i < fileProto.getServiceCount(); i++) {
+            services.add(convertService(fileProto.getService(i), protoPackage, resolver,
+                    comments, i));
+        }
 
         return new ProtoFileDescriptor(javaPackage, syntax, messages, enums, services);
+    }
+
+    /**
+     * Builds a map from SourceCodeInfo path to leading comment text.
+     */
+    private static Map<List<Integer>, String> buildCommentsMap(FileDescriptorProto fileProto) {
+        Map<List<Integer>, String> comments = new HashMap<>();
+        if (fileProto.hasSourceCodeInfo()) {
+            for (SourceCodeInfo.Location loc : fileProto.getSourceCodeInfo().getLocationList()) {
+                if (loc.hasLeadingComments()) {
+                    String comment = loc.getLeadingComments().trim();
+                    if (!comment.isEmpty()) {
+                        comments.put(loc.getPathList(), comment);
+                    }
+                }
+            }
+        }
+        return comments;
+    }
+
+    /**
+     * Looks up a doc comment for the given path.
+     */
+    private static String getDoc(Map<List<Integer>, String> comments, int... path) {
+        List<Integer> key = new ArrayList<>(path.length);
+        for (int p : path) {
+            key.add(p);
+        }
+        return comments.get(key);
+    }
+
+    /**
+     * Concatenates a parent path with additional path components.
+     */
+    private static int[] appendPath(int[] parentPath, int... extra) {
+        int[] result = new int[parentPath.length + extra.length];
+        System.arraycopy(parentPath, 0, result, 0, parentPath.length);
+        System.arraycopy(extra, 0, result, parentPath.length, extra.length);
+        return result;
     }
 
     /**
@@ -163,10 +212,16 @@ public class DescriptorConverter {
     }
 
     private static ProtoMessageDescriptor convertMessage(DescriptorProto messageProto, String syntax,
-                                                         TypeResolver resolver) {
-        List<ProtoEnumDescriptor> nestedEnums = messageProto.getEnumTypeList().stream()
-                .map(DescriptorConverter::convertEnum)
-                .collect(Collectors.toList());
+                                                         TypeResolver resolver,
+                                                         Map<List<Integer>, String> comments,
+                                                         int[] parentPath) {
+        String messageDoc = getDoc(comments, parentPath);
+
+        List<ProtoEnumDescriptor> nestedEnums = new ArrayList<>();
+        for (int i = 0; i < messageProto.getEnumTypeCount(); i++) {
+            nestedEnums.add(convertEnum(messageProto.getEnumType(i), comments,
+                    appendPath(parentPath, 4, i)));
+        }
 
         // Detect map_entry synthetic messages
         Map<String, DescriptorProto> mapEntryTypes = new HashMap<>();
@@ -177,10 +232,15 @@ public class DescriptorConverter {
         }
 
         // Filter out map_entry messages from nested messages
-        List<ProtoMessageDescriptor> nestedMessages = messageProto.getNestedTypeList().stream()
-                .filter(nested -> !mapEntryTypes.containsKey(nested.getName()))
-                .map(m -> convertMessage(m, syntax, resolver))
-                .collect(Collectors.toList());
+        List<ProtoMessageDescriptor> nestedMessages = new ArrayList<>();
+        int nestedIndex = 0;
+        for (int i = 0; i < messageProto.getNestedTypeCount(); i++) {
+            DescriptorProto nested = messageProto.getNestedType(i);
+            if (!mapEntryTypes.containsKey(nested.getName())) {
+                nestedMessages.add(convertMessage(nested, syntax, resolver,
+                        comments, appendPath(parentPath, 3, i)));
+            }
+        }
 
         // Identify synthetic oneofs (created by protoc for proto3 optional fields)
         Set<Integer> syntheticOneofIndices = new HashSet<>();
@@ -200,11 +260,15 @@ public class DescriptorConverter {
             oneofs.add(new ProtoOneofDescriptor(oneofProto.getName(), i));
         }
 
-        List<ProtoFieldDescriptor> fields = messageProto.getFieldList().stream()
-                .map(f -> convertField(f, oneofs, mapEntryTypes, syntax, syntheticOneofIndices, resolver))
-                .collect(Collectors.toList());
+        List<ProtoFieldDescriptor> fields = new ArrayList<>();
+        for (int i = 0; i < messageProto.getFieldCount(); i++) {
+            String fieldDoc = getDoc(comments, appendPath(parentPath, 2, i));
+            fields.add(convertField(messageProto.getField(i), oneofs, mapEntryTypes, syntax,
+                    syntheticOneofIndices, resolver, fieldDoc));
+        }
 
-        return new ProtoMessageDescriptor(messageProto.getName(), fields, nestedMessages, nestedEnums, oneofs);
+        return new ProtoMessageDescriptor(messageProto.getName(), fields, nestedMessages,
+                nestedEnums, oneofs, messageDoc);
     }
 
     private static final Set<String> PACKABLE_PROTO_TYPES = Set.of(
@@ -218,7 +282,8 @@ public class DescriptorConverter {
                                                         Map<String, DescriptorProto> mapEntryTypes,
                                                         String syntax,
                                                         Set<Integer> syntheticOneofIndices,
-                                                        TypeResolver resolver) {
+                                                        TypeResolver resolver,
+                                                        String doc) {
         boolean proto3 = "proto3".equals(syntax);
         boolean proto3Optional = fieldProto.getProto3Optional();
 
@@ -290,9 +355,6 @@ public class DescriptorConverter {
             }
         }
 
-        // No docs available from binary descriptor sets
-        List<String> docs = Collections.emptyList();
-
         // Oneof membership — skip synthetic oneofs (created for proto3 optional)
         int oneofIndex = -1;
         String oneofName = null;
@@ -329,7 +391,7 @@ public class DescriptorConverter {
         }
 
         return new ProtoFieldDescriptor(name, number, protoType, javaType, label, packed,
-                defaultValueSet, defaultValue, defaultValueAsString, docs,
+                defaultValueSet, defaultValue, defaultValueAsString, doc,
                 oneofIndex, oneofName, isMapField, mapKeyField, mapValueField,
                 proto3, proto3Optional);
     }
@@ -349,29 +411,52 @@ public class DescriptorConverter {
         }
         return new ProtoFieldDescriptor(fieldProto.getName(), fieldProto.getNumber(),
                 protoType, javaType, ProtoFieldDescriptor.Label.OPTIONAL, false,
-                false, null, null, Collections.emptyList());
+                false, null, null, null);
     }
 
-    private static ProtoEnumDescriptor convertEnum(EnumDescriptorProto enumProto) {
-        List<ProtoEnumDescriptor.Value> values = enumProto.getValueList().stream()
+    private static ProtoEnumDescriptor convertEnum(EnumDescriptorProto enumProto,
+                                                    Map<List<Integer>, String> comments,
+                                                    int[] parentPath) {
+        String enumDoc = getDoc(comments, parentPath);
+
+        List<ProtoEnumDescriptor.Value> values = new ArrayList<>();
+        List<EnumValueDescriptorProto> sortedValues = enumProto.getValueList().stream()
                 .sorted(Comparator.comparingInt(EnumValueDescriptorProto::getNumber))
-                .map(v -> new ProtoEnumDescriptor.Value(v.getName(), v.getNumber()))
                 .collect(Collectors.toList());
 
-        return new ProtoEnumDescriptor(enumProto.getName(), values);
+        // We need the original index for the path lookup, not the sorted index
+        for (int i = 0; i < enumProto.getValueCount(); i++) {
+            EnumValueDescriptorProto v = enumProto.getValue(i);
+            String valueDoc = getDoc(comments, appendPath(parentPath, 2, i));
+            values.add(new ProtoEnumDescriptor.Value(v.getName(), v.getNumber(), valueDoc));
+        }
+
+        // Sort by number after adding docs
+        values.sort(Comparator.comparingInt(ProtoEnumDescriptor.Value::getNumber));
+
+        return new ProtoEnumDescriptor(enumProto.getName(), values, enumDoc);
     }
 
-    private static ProtoServiceDescriptor convertService(ServiceDescriptorProto serviceProto, String protoPackage,
-                                                         TypeResolver resolver) {
-        List<ProtoMethodDescriptor> methods = serviceProto.getMethodList().stream()
-                .map(m -> new ProtoMethodDescriptor(
-                        m.getName(),
-                        resolver.resolveTypeName(m.getInputType()),
-                        resolver.resolveTypeName(m.getOutputType()),
-                        m.getClientStreaming(),
-                        m.getServerStreaming()))
-                .collect(Collectors.toList());
-        return new ProtoServiceDescriptor(serviceProto.getName(), protoPackage, methods);
+    private static ProtoServiceDescriptor convertService(ServiceDescriptorProto serviceProto,
+                                                         String protoPackage,
+                                                         TypeResolver resolver,
+                                                         Map<List<Integer>, String> comments,
+                                                         int serviceIndex) {
+        String serviceDoc = getDoc(comments, 6, serviceIndex);
+
+        List<ProtoMethodDescriptor> methods = new ArrayList<>();
+        for (int i = 0; i < serviceProto.getMethodCount(); i++) {
+            MethodDescriptorProto m = serviceProto.getMethod(i);
+            String methodDoc = getDoc(comments, 6, serviceIndex, 2, i);
+            methods.add(new ProtoMethodDescriptor(
+                    m.getName(),
+                    resolver.resolveTypeName(m.getInputType()),
+                    resolver.resolveTypeName(m.getOutputType()),
+                    m.getClientStreaming(),
+                    m.getServerStreaming(),
+                    methodDoc));
+        }
+        return new ProtoServiceDescriptor(serviceProto.getName(), protoPackage, methods, serviceDoc);
     }
 
     /**
