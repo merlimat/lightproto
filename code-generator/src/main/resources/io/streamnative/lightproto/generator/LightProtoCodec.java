@@ -38,8 +38,8 @@ class LightProtoCodec {
             unsafe = (sun.misc.Unsafe) f.get(null);
             offset = unsafe.objectFieldOffset(String.class.getDeclaredField("value"));
             arrayBase = unsafe.arrayBaseOffset(byte[].class);
-        } catch (Exception e) {
-            // Fallback to getBytes path
+        } catch (NoSuchFieldException | IllegalAccessException ignore) {
+            // Fallback to non-Unsafe path
         }
         UNSAFE = unsafe;
         STRING_VALUE_OFFSET = offset;
