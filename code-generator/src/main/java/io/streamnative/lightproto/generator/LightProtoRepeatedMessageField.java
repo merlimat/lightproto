@@ -81,6 +81,16 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void serializeJson(PrintWriter w) {
+        w.format("_b.writeByte('[');\n");
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    if (i > 0) { _b.writeByte(','); }\n");
+        w.format("    %s[i].writeJsonTo(_b);\n", pluralName);
+        w.format("}\n");
+        w.format("_b.writeByte(']');\n");
+    }
+
+    @Override
     public void copy(PrintWriter w) {
         w.format("for (int i = 0; i < _other.%s(); i++) {\n", Util.camelCase("get", pluralName, "count"));
         w.format("    %s().copyFrom(_other.%s(i));\n", Util.camelCase("add", singularName), Util.camelCase("get", singularName, "at"));

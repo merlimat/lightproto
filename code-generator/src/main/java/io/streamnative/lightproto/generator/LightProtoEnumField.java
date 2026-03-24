@@ -64,6 +64,13 @@ public class LightProtoEnumField extends LightProtoNumberField {
     }
 
     @Override
+    public void serializeJson(PrintWriter w) {
+        w.format("_b.writeByte('\"');\n");
+        w.format("LightProtoCodec.writeJsonAscii(_b, %s.name());\n", ccName);
+        w.format("_b.writeByte('\"');\n");
+    }
+
+    @Override
     protected String nonDefaultCondition() {
         return ccName + ".getValue() != 0";
     }

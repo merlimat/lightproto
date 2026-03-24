@@ -77,6 +77,7 @@ public class LightProtoMessage {
         generateOneofFields(w);
         generateSerialize(w);
         generateGetSerializedSize(w);
+        generateWriteJsonTo(w);
         generateParseFrom(w);
         generateCheckRequiredFields(w);
         generateClear(w);
@@ -259,6 +260,52 @@ public class LightProtoMessage {
         w.format("            _cachedSize = _size;\n");
         w.format("            return _size;\n");
         w.format("        }\n");
+    }
+
+    private void generateWriteJsonTo(PrintWriter w) {
+        w.println("        /**");
+        w.println("         * Serialize this message to the given buffer as JSON, using");
+        w.println("         * the protobuf JSON encoding (lowerCamelCase field names).");
+        w.println("         * @return the number of bytes written");
+        w.println("         */");
+        w.format("        @Override public int writeJsonTo(io.netty.buffer.ByteBuf _b) {\n");
+        w.format("            int _wIdx = _b.writerIndex();\n");
+        w.format("            _b.writeByte('{');\n");
+        w.format("            boolean _first = true;\n");
+
+        for (LightProtoField f : fields) {
+            String condition = f.serializeCondition();
+            // For repeated fields with no explicit condition, use count > 0
+            String jsonCondition = condition;
+            if (jsonCondition == null && f.isRepeated()) {
+                if (f instanceof LightProtoMapField) {
+                    jsonCondition = "_" + f.ccName + "Count > 0";
+                } else if (f instanceof LightProtoAbstractRepeated repeated) {
+                    jsonCondition = "_" + repeated.pluralName + "Count > 0";
+                }
+            }
+
+            if (jsonCondition != null) {
+                w.format("            if (%s) {\n", jsonCondition);
+            }
+            w.format("                if (!_first) { _b.writeByte(','); }\n");
+            w.format("                _first = false;\n");
+            w.format("                LightProtoCodec.writeJsonFieldName(_b, \"%s\");\n", f.ccName);
+            f.serializeJson(w);
+            if (jsonCondition != null) {
+                w.format("            }\n");
+            }
+        }
+
+        w.format("            _b.writeByte('}');\n");
+        w.format("            return _b.writerIndex() - _wIdx;\n");
+        w.format("        }\n");
+
+        // Convenience method: toJson()
+        w.println("        /** Serialize this message to a JSON string. */");
+        w.println("        public String toJson() {");
+        w.println("            return LightProtoCodec.toJson(this);");
+        w.println("        }");
     }
 
     private void generateBitFields(PrintWriter w) {

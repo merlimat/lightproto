@@ -97,6 +97,21 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void serializeJson(PrintWriter w) {
+        w.format("_b.writeByte('[');\n");
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    if (i > 0) { _b.writeByte(','); }\n");
+        w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
+        w.format("    if (_bh.idx == -1) {\n");
+        w.format("        LightProtoCodec.writeJsonBase64(_b, _bh.b, 0, _bh.len);\n");
+        w.format("    } else {\n");
+        w.format("        LightProtoCodec.writeJsonBase64(_b, _parsedBuffer, _bh.idx, _bh.len);\n");
+        w.format("    }\n");
+        w.format("}\n");
+        w.format("_b.writeByte(']');\n");
+    }
+
+    @Override
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Adds a value to the {@code %s} list from a byte array. */\n", field.getName());
         w.format("public void %s(byte[] %s) {\n", Util.camelCase("add", singularName), singularName);

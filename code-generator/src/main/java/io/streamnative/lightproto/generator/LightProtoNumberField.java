@@ -190,6 +190,25 @@ public class LightProtoNumberField extends LightProtoField {
     }
 
     @Override
+    public void serializeJson(PrintWriter w) {
+        String type = field.getProtoType();
+        if (type.equals("float")) {
+            w.format("LightProtoCodec.writeJsonAscii(_b, Float.toString(%s));\n", ccName);
+        } else if (type.equals("double")) {
+            w.format("LightProtoCodec.writeJsonAscii(_b, Double.toString(%s));\n", ccName);
+        } else if (type.equals("int64") || type.equals("uint64") || type.equals("sint64")
+                || type.equals("fixed64") || type.equals("sfixed64")) {
+            // Protobuf JSON format quotes 64-bit integers as strings
+            w.format("_b.writeByte('\"');\n");
+            w.format("LightProtoCodec.writeJsonAscii(_b, Long.toString(%s));\n", ccName);
+            w.format("_b.writeByte('\"');\n");
+        } else {
+            // int32, uint32, sint32, fixed32, sfixed32
+            w.format("LightProtoCodec.writeJsonAscii(_b, Integer.toString(%s));\n", ccName);
+        }
+    }
+
+    @Override
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Set the {@code %s} field. */\n", field.getName());
         w.format("public %s %s(%s %s) {\n", enclosingType, Util.camelCase("set", field.getName()), field.getJavaType(), camelCase(field.getName()));

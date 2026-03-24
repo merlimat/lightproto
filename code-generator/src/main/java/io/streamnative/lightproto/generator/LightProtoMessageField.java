@@ -77,6 +77,11 @@ public class LightProtoMessageField extends LightProtoField {
     }
 
     @Override
+    public void serializeJson(PrintWriter w) {
+        w.format("%s.writeJsonTo(_b);\n", ccName);
+    }
+
+    @Override
     public void serialize(PrintWriter w) {
         w.format("%s;\n", writeTagExpr(tagName()));
         w.format("_addr = LightProtoCodec.writeRawVarInt(_base, _addr, %s.getSerializedSize());\n", ccName);

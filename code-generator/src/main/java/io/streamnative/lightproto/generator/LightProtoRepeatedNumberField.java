@@ -109,6 +109,35 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void serializeJson(PrintWriter w) {
+        w.format("_b.writeByte('[');\n");
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    if (i > 0) { _b.writeByte(','); }\n");
+        w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+        String type = field.getProtoType();
+        if (field.isEnumField()) {
+            w.format("    _b.writeByte('\"');\n");
+            w.format("    LightProtoCodec.writeJsonAscii(_b, _item.name());\n");
+            w.format("    _b.writeByte('\"');\n");
+        } else if (type.equals("bool")) {
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Boolean.toString(_item));\n");
+        } else if (type.equals("float")) {
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Float.toString(_item));\n");
+        } else if (type.equals("double")) {
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Double.toString(_item));\n");
+        } else if (type.equals("int64") || type.equals("uint64") || type.equals("sint64")
+                || type.equals("fixed64") || type.equals("sfixed64")) {
+            w.format("    _b.writeByte('\"');\n");
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Long.toString(_item));\n");
+            w.format("    _b.writeByte('\"');\n");
+        } else {
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Integer.toString(_item));\n");
+        }
+        w.format("}\n");
+        w.format("_b.writeByte(']');\n");
+    }
+
+    @Override
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Adds a value to the {@code %s} list. */\n", field.getName());
         w.format("public void %s(%s %s) {\n", Util.camelCase("add", singularName), field.getJavaType(), singularName);

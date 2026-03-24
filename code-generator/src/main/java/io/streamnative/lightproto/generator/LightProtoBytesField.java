@@ -122,6 +122,15 @@ public class LightProtoBytesField extends LightProtoField {
     }
 
     @Override
+    public void serializeJson(PrintWriter w) {
+        w.format("if (_%sIdx == -1) {\n", ccName);
+        w.format("    LightProtoCodec.writeJsonBase64(_b, %s, 0, _%sLen);\n", ccName, ccName);
+        w.format("} else {\n");
+        w.format("    LightProtoCodec.writeJsonBase64(_b, _parsedBuffer, _%sIdx, _%sLen);\n", ccName, ccName);
+        w.format("}\n");
+    }
+
+    @Override
     public void serialize(PrintWriter w) {
         w.format("%s;\n", writeTagExpr(tagName()));
         w.format("_addr = LightProtoCodec.writeRawVarInt(_base, _addr, _%sLen);\n", ccName);

@@ -138,6 +138,8 @@ public abstract class LightProtoField {
 
     abstract public void serialize(PrintWriter w);
 
+    abstract public void serializeJson(PrintWriter w);
+
     abstract public void parse(PrintWriter w);
 
     abstract public void copy(PrintWriter w);

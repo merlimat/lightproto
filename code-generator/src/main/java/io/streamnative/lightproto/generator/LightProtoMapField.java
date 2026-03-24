@@ -511,6 +511,72 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void serializeJson(PrintWriter w) {
+        w.format("_b.writeByte('{');\n");
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
+        w.format("    if (_i > 0) { _b.writeByte(','); }\n");
+
+        // Write key (protobuf JSON always quotes map keys as strings)
+        if (isStringKey()) {
+            w.format("    LightProtoCodec.StringHolder _ksh = _%sKeys[_i];\n", ccName);
+            w.format("    if (_ksh.s == null) {\n");
+            w.format("        _ksh.s = LightProtoCodec.readString(_parsedBuffer, _ksh.idx, _ksh.len);\n");
+            w.format("    }\n");
+            w.format("    LightProtoCodec.writeJsonString(_b, _ksh.s);\n");
+        } else if (keyField.getJavaType().equals("boolean")) {
+            w.format("    _b.writeByte('\"');\n");
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Boolean.toString(_%sKeys[_i]));\n", ccName);
+            w.format("    _b.writeByte('\"');\n");
+        } else if (keyField.getJavaType().equals("long")) {
+            w.format("    _b.writeByte('\"');\n");
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Long.toString(_%sKeys[_i]));\n", ccName);
+            w.format("    _b.writeByte('\"');\n");
+        } else {
+            w.format("    _b.writeByte('\"');\n");
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Integer.toString(_%sKeys[_i]));\n", ccName);
+            w.format("    _b.writeByte('\"');\n");
+        }
+        w.format("    _b.writeByte(':');\n");
+
+        // Write value
+        if (isStringValue()) {
+            w.format("    LightProtoCodec.StringHolder _vsh = _%sValues[_i];\n", ccName);
+            w.format("    if (_vsh.s == null) {\n");
+            w.format("        _vsh.s = LightProtoCodec.readString(_parsedBuffer, _vsh.idx, _vsh.len);\n");
+            w.format("    }\n");
+            w.format("    LightProtoCodec.writeJsonString(_b, _vsh.s);\n");
+        } else if (isBytesValue()) {
+            w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[_i];\n", ccName);
+            w.format("    if (_vbh.idx == -1) {\n");
+            w.format("        LightProtoCodec.writeJsonBase64(_b, _vbh.b, 0, _vbh.len);\n");
+            w.format("    } else {\n");
+            w.format("        LightProtoCodec.writeJsonBase64(_b, _parsedBuffer, _vbh.idx, _vbh.len);\n");
+            w.format("    }\n");
+        } else if (isMessageValue()) {
+            w.format("    _%sValues[_i].writeJsonTo(_b);\n", ccName);
+        } else if (isEnumValue()) {
+            w.format("    _b.writeByte('\"');\n");
+            w.format("    LightProtoCodec.writeJsonAscii(_b, _%sValues[_i].name());\n", ccName);
+            w.format("    _b.writeByte('\"');\n");
+        } else if (valueField.getProtoType().equals("bool")) {
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Boolean.toString(_%sValues[_i]));\n", ccName);
+        } else if (valueField.getJavaType().equals("long")) {
+            w.format("    _b.writeByte('\"');\n");
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Long.toString(_%sValues[_i]));\n", ccName);
+            w.format("    _b.writeByte('\"');\n");
+        } else if (valueField.getJavaType().equals("float")) {
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Float.toString(_%sValues[_i]));\n", ccName);
+        } else if (valueField.getJavaType().equals("double")) {
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Double.toString(_%sValues[_i]));\n", ccName);
+        } else {
+            w.format("    LightProtoCodec.writeJsonAscii(_b, Integer.toString(_%sValues[_i]));\n", ccName);
+        }
+
+        w.format("}\n");
+        w.format("_b.writeByte('}');\n");
+    }
+
+    @Override
     public void serialize(PrintWriter w) {
         w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
 

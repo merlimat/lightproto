@@ -576,9 +576,20 @@ class LightProtoCodec {
     interface LightProtoMessage {
         int getSerializedSize();
         int writeTo(ByteBuf b);
+        int writeJsonTo(ByteBuf b);
         void parseFrom(ByteBuf buffer, int size);
         void parseFrom(byte[] a);
         void materialize();
+    }
+
+    static String toJson(LightProtoMessage msg) {
+        ByteBuf buf = io.netty.buffer.Unpooled.buffer(256);
+        try {
+            msg.writeJsonTo(buf);
+            return buf.toString(java.nio.charset.StandardCharsets.UTF_8);
+        } finally {
+            buf.release();
+        }
     }
 
     static final class StringHolder {
@@ -591,5 +602,78 @@ class LightProtoCodec {
         ByteBuf b;
         int idx;
         int len;
+    }
+
+    // ==================== JSON serialization helpers ====================
+
+    private static final byte[] HEX_CHARS = "0123456789abcdef".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+
+    static void writeJsonFieldName(ByteBuf b, String name) {
+        b.writeByte('"');
+        b.writeCharSequence(name, java.nio.charset.StandardCharsets.US_ASCII);
+        b.writeByte('"');
+        b.writeByte(':');
+    }
+
+    static void writeJsonString(ByteBuf b, String s) {
+        b.writeByte('"');
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"':
+                    b.writeByte('\\');
+                    b.writeByte('"');
+                    break;
+                case '\\':
+                    b.writeByte('\\');
+                    b.writeByte('\\');
+                    break;
+                case '\b':
+                    b.writeByte('\\');
+                    b.writeByte('b');
+                    break;
+                case '\f':
+                    b.writeByte('\\');
+                    b.writeByte('f');
+                    break;
+                case '\n':
+                    b.writeByte('\\');
+                    b.writeByte('n');
+                    break;
+                case '\r':
+                    b.writeByte('\\');
+                    b.writeByte('r');
+                    break;
+                case '\t':
+                    b.writeByte('\\');
+                    b.writeByte('t');
+                    break;
+                default:
+                    if (c < 0x20) {
+                        b.writeByte('\\');
+                        b.writeByte('u');
+                        b.writeByte(HEX_CHARS[(c >> 12) & 0xF]);
+                        b.writeByte(HEX_CHARS[(c >> 8) & 0xF]);
+                        b.writeByte(HEX_CHARS[(c >> 4) & 0xF]);
+                        b.writeByte(HEX_CHARS[c & 0xF]);
+                    } else {
+                        b.writeCharSequence(String.valueOf(c), java.nio.charset.StandardCharsets.UTF_8);
+                    }
+            }
+        }
+        b.writeByte('"');
+    }
+
+    static void writeJsonBase64(ByteBuf b, ByteBuf data, int offset, int len) {
+        byte[] raw = new byte[len];
+        data.getBytes(offset, raw);
+        b.writeByte('"');
+        b.writeCharSequence(java.util.Base64.getEncoder().encodeToString(raw),
+                java.nio.charset.StandardCharsets.US_ASCII);
+        b.writeByte('"');
+    }
+
+    static void writeJsonAscii(ByteBuf b, String s) {
+        b.writeCharSequence(s, java.nio.charset.StandardCharsets.US_ASCII);
     }
 }

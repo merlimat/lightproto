@@ -118,6 +118,11 @@ public class LightProtoStringField extends LightProtoField {
     }
 
     @Override
+    public void serializeJson(PrintWriter w) {
+        w.format("LightProtoCodec.writeJsonString(_b, %s());\n", Util.camelCase("get", field.getName()));
+    }
+
+    @Override
     public void parse(PrintWriter w) {
         w.format("_%sBufferLen = LightProtoCodec.readVarInt(_buffer);\n", ccName);
         w.format("_%sBufferIdx = _buffer.readerIndex();\n", ccName);

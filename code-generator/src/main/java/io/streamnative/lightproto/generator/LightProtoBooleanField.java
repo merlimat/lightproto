@@ -46,6 +46,11 @@ public class LightProtoBooleanField extends LightProtoNumberField {
     }
 
     @Override
+    public void serializeJson(PrintWriter w) {
+        w.format("LightProtoCodec.writeJsonAscii(_b, Boolean.toString(%s));\n", ccName);
+    }
+
+    @Override
     protected String nonDefaultCondition() {
         return ccName;
     }
