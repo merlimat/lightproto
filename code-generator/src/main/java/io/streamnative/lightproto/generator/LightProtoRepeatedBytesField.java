@@ -112,6 +112,17 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void parseJson(PrintWriter w) {
+        w.format("                _r.expect((byte) '[');\n");
+        w.format("                if (!_r.tryConsume((byte) ']')) {\n");
+        w.format("                    do {\n");
+        w.format("                        %s(_r.readBase64Bytes());\n", Util.camelCase("add", singularName));
+        w.format("                    } while (_r.tryConsume((byte) ','));\n");
+        w.format("                    _r.expect((byte) ']');\n");
+        w.format("                }\n");
+    }
+
+    @Override
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Adds a value to the {@code %s} list from a byte array. */\n", field.getName());
         w.format("public void %s(byte[] %s) {\n", Util.camelCase("add", singularName), singularName);

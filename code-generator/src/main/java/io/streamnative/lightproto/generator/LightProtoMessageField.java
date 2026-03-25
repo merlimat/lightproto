@@ -82,6 +82,11 @@ public class LightProtoMessageField extends LightProtoField {
     }
 
     @Override
+    public void parseJson(PrintWriter w) {
+        w.format("                %s()._parseJsonObject(_r);\n", Util.camelCase("set", ccName));
+    }
+
+    @Override
     public void serialize(PrintWriter w) {
         w.format("%s;\n", writeTagExpr(tagName()));
         w.format("_addr = LightProtoCodec.writeRawVarInt(_base, _addr, %s.getSerializedSize());\n", ccName);

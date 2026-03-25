@@ -579,7 +579,13 @@ class LightProtoCodec {
         int writeJsonTo(ByteBuf b);
         void parseFrom(ByteBuf buffer, int size);
         void parseFrom(byte[] a);
+        void parseFromJson(byte[] a);
+        void parseFromJson(ByteBuf b);
         void materialize();
+    }
+
+    static void parseFromJson(LightProtoMessage msg, String json) {
+        msg.parseFromJson(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     static String toJson(LightProtoMessage msg) {
@@ -675,5 +681,253 @@ class LightProtoCodec {
 
     static void writeJsonAscii(ByteBuf b, String s) {
         b.writeCharSequence(s, java.nio.charset.StandardCharsets.US_ASCII);
+    }
+
+    // ==================== JSON parsing utilities ====================
+
+    /**
+     * Lightweight recursive-descent JSON reader operating on a byte array.
+     * Supports the subset of JSON used by protobuf's JsonFormat.
+     */
+    static final class JsonReader {
+        private final byte[] data;
+        private int pos;
+
+        JsonReader(byte[] data) {
+            this.data = data;
+            this.pos = 0;
+        }
+
+        JsonReader(ByteBuf b) {
+            this.data = new byte[b.readableBytes()];
+            b.getBytes(b.readerIndex(), this.data);
+            this.pos = 0;
+        }
+
+        void skipWhitespace() {
+            while (pos < data.length) {
+                byte c = data[pos];
+                if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+                    pos++;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        byte peek() {
+            skipWhitespace();
+            if (pos >= data.length) {
+                throw new IllegalArgumentException("Unexpected end of JSON");
+            }
+            return data[pos];
+        }
+
+        void expect(byte expected) {
+            skipWhitespace();
+            if (pos >= data.length || data[pos] != expected) {
+                throw new IllegalArgumentException("Expected '" + (char) expected
+                        + "' at position " + pos + " but found "
+                        + (pos < data.length ? "'" + (char) data[pos] + "'" : "end of input"));
+            }
+            pos++;
+        }
+
+        boolean tryConsume(byte expected) {
+            skipWhitespace();
+            if (pos < data.length && data[pos] == expected) {
+                pos++;
+                return true;
+            }
+            return false;
+        }
+
+        /**
+         * Read a JSON string value (the opening '"' must be next).
+         * Handles escape sequences including unicode escapes.
+         */
+        String readString() {
+            expect((byte) '"');
+            StringBuilder sb = new StringBuilder();
+            while (pos < data.length) {
+                byte c = data[pos++];
+                if (c == '"') {
+                    return sb.toString();
+                }
+                if (c == '\\') {
+                    if (pos >= data.length) {
+                        throw new IllegalArgumentException("Unexpected end of JSON in string escape");
+                    }
+                    byte esc = data[pos++];
+                    switch (esc) {
+                        case '"': sb.append('"'); break;
+                        case '\\': sb.append('\\'); break;
+                        case '/': sb.append('/'); break;
+                        case 'b': sb.append('\b'); break;
+                        case 'f': sb.append('\f'); break;
+                        case 'n': sb.append('\n'); break;
+                        case 'r': sb.append('\r'); break;
+                        case 't': sb.append('\t'); break;
+                        case 'u':
+                            if (pos + 4 > data.length) {
+                                throw new IllegalArgumentException("Incomplete \\u escape");
+                            }
+                            int cp = Integer.parseInt(new String(data, pos, 4,
+                                    java.nio.charset.StandardCharsets.US_ASCII), 16);
+                            sb.append((char) cp);
+                            pos += 4;
+                            break;
+                        default:
+                            throw new IllegalArgumentException("Invalid escape: \\" + (char) esc);
+                    }
+                } else {
+                    // Handle multi-byte UTF-8
+                    if ((c & 0x80) == 0) {
+                        sb.append((char) c);
+                    } else if ((c & 0xE0) == 0xC0) {
+                        int c2 = data[pos++] & 0xFF;
+                        sb.append((char) (((c & 0x1F) << 6) | (c2 & 0x3F)));
+                    } else if ((c & 0xF0) == 0xE0) {
+                        int c2 = data[pos++] & 0xFF;
+                        int c3 = data[pos++] & 0xFF;
+                        sb.append((char) (((c & 0x0F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F)));
+                    } else if ((c & 0xF8) == 0xF0) {
+                        int c2 = data[pos++] & 0xFF;
+                        int c3 = data[pos++] & 0xFF;
+                        int c4 = data[pos++] & 0xFF;
+                        int codePoint = ((c & 0x07) << 18) | ((c2 & 0x3F) << 12)
+                                | ((c3 & 0x3F) << 6) | (c4 & 0x3F);
+                        sb.appendCodePoint(codePoint);
+                    }
+                }
+            }
+            throw new IllegalArgumentException("Unterminated string");
+        }
+
+        /**
+         * Read a JSON number token as a raw string (for parsing into int/long/float/double).
+         * Also handles quoted numbers (protobuf JSON quotes int64 types).
+         */
+        String readNumberToken() {
+            skipWhitespace();
+            boolean quoted = false;
+            if (pos < data.length && data[pos] == '"') {
+                quoted = true;
+                pos++;
+            }
+            int start = pos;
+            while (pos < data.length) {
+                byte c = data[pos];
+                if (c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E'
+                        || (c >= '0' && c <= '9')) {
+                    pos++;
+                } else {
+                    break;
+                }
+            }
+            String token = new String(data, start, pos - start, java.nio.charset.StandardCharsets.US_ASCII);
+            if (quoted) {
+                expect((byte) '"');
+            }
+            return token;
+        }
+
+        int readInt() {
+            return Integer.parseInt(readNumberToken());
+        }
+
+        long readLong() {
+            return Long.parseLong(readNumberToken());
+        }
+
+        float readFloat() {
+            skipWhitespace();
+            if (pos < data.length && data[pos] == '"') {
+                // Handle special float values: "NaN", "Infinity", "-Infinity"
+                String s = readString();
+                return Float.parseFloat(s);
+            }
+            return Float.parseFloat(readNumberToken());
+        }
+
+        double readDouble() {
+            skipWhitespace();
+            if (pos < data.length && data[pos] == '"') {
+                String s = readString();
+                return Double.parseDouble(s);
+            }
+            return Double.parseDouble(readNumberToken());
+        }
+
+        boolean readBool() {
+            skipWhitespace();
+            if (pos + 4 <= data.length && data[pos] == 't' && data[pos + 1] == 'r'
+                    && data[pos + 2] == 'u' && data[pos + 3] == 'e') {
+                pos += 4;
+                return true;
+            }
+            if (pos + 5 <= data.length && data[pos] == 'f' && data[pos + 1] == 'a'
+                    && data[pos + 2] == 'l' && data[pos + 3] == 's' && data[pos + 4] == 'e') {
+                pos += 5;
+                return false;
+            }
+            throw new IllegalArgumentException("Expected 'true' or 'false' at position " + pos);
+        }
+
+        /**
+         * Read a base64-encoded bytes field value.
+         */
+        byte[] readBase64Bytes() {
+            String encoded = readString();
+            return java.util.Base64.getDecoder().decode(encoded);
+        }
+
+        /**
+         * Skip an unknown JSON value (object, array, string, number, boolean, null).
+         */
+        void skipValue() {
+            skipWhitespace();
+            if (pos >= data.length) return;
+            byte c = data[pos];
+            if (c == '"') {
+                readString();
+            } else if (c == '{') {
+                pos++;
+                if (!tryConsume((byte) '}')) {
+                    do {
+                        readString(); // key
+                        expect((byte) ':');
+                        skipValue();
+                    } while (tryConsume((byte) ','));
+                    expect((byte) '}');
+                }
+            } else if (c == '[') {
+                pos++;
+                if (!tryConsume((byte) ']')) {
+                    do {
+                        skipValue();
+                    } while (tryConsume((byte) ','));
+                    expect((byte) ']');
+                }
+            } else if (c == 't' || c == 'f') {
+                readBool();
+            } else if (c == 'n') {
+                // null
+                if (pos + 4 <= data.length && data[pos + 1] == 'u'
+                        && data[pos + 2] == 'l' && data[pos + 3] == 'l') {
+                    pos += 4;
+                } else {
+                    throw new IllegalArgumentException("Invalid token at position " + pos);
+                }
+            } else {
+                // number
+                readNumberToken();
+            }
+        }
+
+        boolean isEof() {
+            skipWhitespace();
+            return pos >= data.length;
+        }
     }
 }

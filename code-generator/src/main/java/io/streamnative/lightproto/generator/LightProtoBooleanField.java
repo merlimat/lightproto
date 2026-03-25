@@ -51,6 +51,11 @@ public class LightProtoBooleanField extends LightProtoNumberField {
     }
 
     @Override
+    public void parseJson(PrintWriter w) {
+        w.format("                %s(_r.readBool());\n", Util.camelCase("set", field.getName()));
+    }
+
+    @Override
     protected String nonDefaultCondition() {
         return ccName;
     }

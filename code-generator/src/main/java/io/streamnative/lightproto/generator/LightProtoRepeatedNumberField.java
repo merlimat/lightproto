@@ -138,6 +138,32 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void parseJson(PrintWriter w) {
+        String type = field.getProtoType();
+        w.format("                _r.expect((byte) '[');\n");
+        w.format("                if (!_r.tryConsume((byte) ']')) {\n");
+        w.format("                    do {\n");
+        if (field.isEnumField()) {
+            w.format("                        { %s _v = %s.valueOf(_r.readString());\n", field.getJavaType(), field.getJavaType());
+            w.format("                        if (_v != null) { %s(_v); } }\n", Util.camelCase("add", singularName));
+        } else if (type.equals("bool")) {
+            w.format("                        %s(_r.readBool());\n", Util.camelCase("add", singularName));
+        } else if (type.equals("float")) {
+            w.format("                        %s(_r.readFloat());\n", Util.camelCase("add", singularName));
+        } else if (type.equals("double")) {
+            w.format("                        %s(_r.readDouble());\n", Util.camelCase("add", singularName));
+        } else if (type.equals("int64") || type.equals("uint64") || type.equals("sint64")
+                || type.equals("fixed64") || type.equals("sfixed64")) {
+            w.format("                        %s(_r.readLong());\n", Util.camelCase("add", singularName));
+        } else {
+            w.format("                        %s(_r.readInt());\n", Util.camelCase("add", singularName));
+        }
+        w.format("                    } while (_r.tryConsume((byte) ','));\n");
+        w.format("                    _r.expect((byte) ']');\n");
+        w.format("                }\n");
+    }
+
+    @Override
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Adds a value to the {@code %s} list. */\n", field.getName());
         w.format("public void %s(%s %s) {\n", Util.camelCase("add", singularName), field.getJavaType(), singularName);

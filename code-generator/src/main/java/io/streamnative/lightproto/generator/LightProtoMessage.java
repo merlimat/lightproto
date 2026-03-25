@@ -83,6 +83,7 @@ public class LightProtoMessage {
         generateClear(w);
         generateCopyFrom(w);
 
+        generateParseFromJson(w);
         generateMaterialize(w);
 
         w.println("        /** Serialize this message to a new byte array. */");
@@ -306,6 +307,52 @@ public class LightProtoMessage {
         w.println("        public String toJson() {");
         w.println("            return LightProtoCodec.toJson(this);");
         w.println("        }");
+    }
+
+    private void generateParseFromJson(PrintWriter w) {
+        // Public API: parseFromJson(byte[])
+        w.println("        /** Deserialize this message from a JSON byte array. */");
+        w.println("        @Override public void parseFromJson(byte[] _a) {");
+        w.println("            clear();");
+        w.println("            LightProtoCodec.JsonReader _r = new LightProtoCodec.JsonReader(_a);");
+        w.println("            _parseJsonObject(_r);");
+        w.println("        }");
+
+        // Public API: parseFromJson(ByteBuf)
+        w.println("        /** Deserialize this message from a JSON-encoded ByteBuf. */");
+        w.println("        @Override public void parseFromJson(io.netty.buffer.ByteBuf _b) {");
+        w.println("            clear();");
+        w.println("            LightProtoCodec.JsonReader _r = new LightProtoCodec.JsonReader(_b);");
+        w.println("            _parseJsonObject(_r);");
+        w.println("        }");
+
+        // Convenience: parseFromJson(String)
+        w.println("        /** Deserialize this message from a JSON string. */");
+        w.println("        public void parseFromJson(String _json) {");
+        w.println("            parseFromJson(_json.getBytes(java.nio.charset.StandardCharsets.UTF_8));");
+        w.println("        }");
+
+        // Internal: _parseJsonObject(JsonReader) — used by nested messages
+        w.format("        void _parseJsonObject(LightProtoCodec.JsonReader _r) {\n");
+        w.format("            _r.expect((byte) '{');\n");
+        w.format("            if (_r.tryConsume((byte) '}')) { return; }\n");
+        w.format("            do {\n");
+        w.format("                String _fieldName = _r.readString();\n");
+        w.format("                _r.expect((byte) ':');\n");
+        w.format("                switch (_fieldName) {\n");
+
+        for (LightProtoField f : fields) {
+            w.format("                case \"%s\":\n", f.ccName);
+            f.parseJson(w);
+            w.format("                    break;\n");
+        }
+
+        w.format("                default:\n");
+        w.format("                    _r.skipValue();\n");
+        w.format("                }\n");
+        w.format("            } while (_r.tryConsume((byte) ','));\n");
+        w.format("            _r.expect((byte) '}');\n");
+        w.format("        }\n");
     }
 
     private void generateBitFields(PrintWriter w) {

@@ -112,6 +112,17 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void parseJson(PrintWriter w) {
+        w.format("                _r.expect((byte) '[');\n");
+        w.format("                if (!_r.tryConsume((byte) ']')) {\n");
+        w.format("                    do {\n");
+        w.format("                        %s(_r.readString());\n", Util.camelCase("add", singularName));
+        w.format("                    } while (_r.tryConsume((byte) ','));\n");
+        w.format("                    _r.expect((byte) ']');\n");
+        w.format("                }\n");
+    }
+
+    @Override
     public void copy(PrintWriter w) {
         w.format("for (int i = 0; i < _other.%s(); i++) {\n", Util.camelCase("get", pluralName, "count"));
         w.format("    %s(_other.%s(i));\n", Util.camelCase("add", singularName), Util.camelCase("get", singularName, "at"));

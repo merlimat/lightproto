@@ -577,6 +577,52 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void parseJson(PrintWriter w) {
+        w.format("                _r.expect((byte) '{');\n");
+        w.format("                if (!_r.tryConsume((byte) '}')) {\n");
+        w.format("                    do {\n");
+
+        // Read key (always a quoted string in protobuf JSON)
+        if (isStringKey()) {
+            w.format("                        String _key = _r.readString();\n");
+        } else if (keyField.getJavaType().equals("boolean")) {
+            w.format("                        boolean _key = Boolean.parseBoolean(_r.readString());\n");
+        } else if (keyField.getJavaType().equals("long")) {
+            w.format("                        long _key = Long.parseLong(_r.readString());\n");
+        } else {
+            w.format("                        int _key = Integer.parseInt(_r.readString());\n");
+        }
+        w.format("                        _r.expect((byte) ':');\n");
+
+        // Read value
+        if (isMessageValue()) {
+            w.format("                        %s(_key)._parseJsonObject(_r);\n", Util.camelCase("put", ccName));
+        } else if (isStringValue()) {
+            w.format("                        %s(_key, _r.readString());\n", Util.camelCase("put", ccName));
+        } else if (isBytesValue()) {
+            w.format("                        %s(_key, _r.readBase64Bytes());\n", Util.camelCase("put", ccName));
+        } else if (isEnumValue()) {
+            w.format("                        { %s _v = %s.valueOf(_r.readString());\n",
+                    valueField.getJavaType(), valueField.getJavaType());
+            w.format("                        if (_v != null) { %s(_key, _v); } }\n", Util.camelCase("put", ccName));
+        } else if (valueField.getProtoType().equals("bool")) {
+            w.format("                        %s(_key, _r.readBool());\n", Util.camelCase("put", ccName));
+        } else if (valueField.getProtoType().equals("float")) {
+            w.format("                        %s(_key, _r.readFloat());\n", Util.camelCase("put", ccName));
+        } else if (valueField.getProtoType().equals("double")) {
+            w.format("                        %s(_key, _r.readDouble());\n", Util.camelCase("put", ccName));
+        } else if (valueField.getJavaType().equals("long")) {
+            w.format("                        %s(_key, _r.readLong());\n", Util.camelCase("put", ccName));
+        } else {
+            w.format("                        %s(_key, _r.readInt());\n", Util.camelCase("put", ccName));
+        }
+
+        w.format("                    } while (_r.tryConsume((byte) ','));\n");
+        w.format("                    _r.expect((byte) '}');\n");
+        w.format("                }\n");
+    }
+
+    @Override
     public void serialize(PrintWriter w) {
         w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
 

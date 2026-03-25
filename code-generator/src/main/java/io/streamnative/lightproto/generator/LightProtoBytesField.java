@@ -131,6 +131,11 @@ public class LightProtoBytesField extends LightProtoField {
     }
 
     @Override
+    public void parseJson(PrintWriter w) {
+        w.format("                %s(_r.readBase64Bytes());\n", Util.camelCase("set", field.getName()));
+    }
+
+    @Override
     public void serialize(PrintWriter w) {
         w.format("%s;\n", writeTagExpr(tagName()));
         w.format("_addr = LightProtoCodec.writeRawVarInt(_base, _addr, _%sLen);\n", ccName);

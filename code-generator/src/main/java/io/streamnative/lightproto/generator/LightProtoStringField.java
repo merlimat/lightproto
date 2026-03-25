@@ -123,6 +123,11 @@ public class LightProtoStringField extends LightProtoField {
     }
 
     @Override
+    public void parseJson(PrintWriter w) {
+        w.format("                %s(_r.readString());\n", Util.camelCase("set", field.getName()));
+    }
+
+    @Override
     public void parse(PrintWriter w) {
         w.format("_%sBufferLen = LightProtoCodec.readVarInt(_buffer);\n", ccName);
         w.format("_%sBufferIdx = _buffer.readerIndex();\n", ccName);

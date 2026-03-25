@@ -209,6 +209,22 @@ public class LightProtoNumberField extends LightProtoField {
     }
 
     @Override
+    public void parseJson(PrintWriter w) {
+        String type = field.getProtoType();
+        if (type.equals("float")) {
+            w.format("                %s(_r.readFloat());\n", Util.camelCase("set", field.getName()));
+        } else if (type.equals("double")) {
+            w.format("                %s(_r.readDouble());\n", Util.camelCase("set", field.getName()));
+        } else if (type.equals("int64") || type.equals("uint64") || type.equals("sint64")
+                || type.equals("fixed64") || type.equals("sfixed64")) {
+            w.format("                %s(_r.readLong());\n", Util.camelCase("set", field.getName()));
+        } else {
+            // int32, uint32, sint32, fixed32, sfixed32
+            w.format("                %s(_r.readInt());\n", Util.camelCase("set", field.getName()));
+        }
+    }
+
+    @Override
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Set the {@code %s} field. */\n", field.getName());
         w.format("public %s %s(%s %s) {\n", enclosingType, Util.camelCase("set", field.getName()), field.getJavaType(), camelCase(field.getName()));

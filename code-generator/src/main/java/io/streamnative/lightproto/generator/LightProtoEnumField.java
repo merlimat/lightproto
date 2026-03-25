@@ -71,6 +71,12 @@ public class LightProtoEnumField extends LightProtoNumberField {
     }
 
     @Override
+    public void parseJson(PrintWriter w) {
+        w.format("                { %s _v = %s.valueOf(_r.readString());\n", field.getJavaType(), field.getJavaType());
+        w.format("                if (_v != null) { %s(_v); } }\n", Util.camelCase("set", field.getName()));
+    }
+
+    @Override
     protected String nonDefaultCondition() {
         return ccName + ".getValue() != 0";
     }

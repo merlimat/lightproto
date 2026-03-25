@@ -202,4 +202,209 @@ public class JacksonJsonTest {
 
         assertEquals(pbJson, lpJson);
     }
+
+    // ==================== Round-trip tests (toJson -> parseFromJson) ====================
+
+    @Test
+    public void testNumbersRoundTrip() throws Exception {
+        Numbers original = new Numbers()
+                .setXInt32(42)
+                .setXInt64(123456789L)
+                .setXUint32(100)
+                .setXUint64(200L)
+                .setXSint32(-50)
+                .setXSint64(-100L)
+                .setXFixed32(1000)
+                .setXFixed64(2000L)
+                .setXSfixed32(-1000)
+                .setXSfixed64(-2000L)
+                .setXFloat(3.14f)
+                .setXDouble(2.71828)
+                .setXBool(true)
+                .setEnum1(Enum1.X1_1)
+                .setEnum2(Numbers.Enum2.X2_2);
+
+        String json = original.toJson();
+        Numbers parsed = new Numbers();
+        parsed.parseFromJson(json);
+
+        assertArrayEquals(original.toByteArray(), parsed.toByteArray());
+    }
+
+    @Test
+    public void testStringRoundTrip() throws Exception {
+        S original = new S();
+        original.setId("hello-world");
+        original.addName("alice");
+        original.addName("bob");
+
+        String json = original.toJson();
+        S parsed = new S();
+        parsed.parseFromJson(json);
+
+        assertArrayEquals(original.toByteArray(), parsed.toByteArray());
+    }
+
+    @Test
+    public void testNestedMessageRoundTrip() throws Exception {
+        M original = new M();
+        original.setX().setA("value-a").setB("value-b");
+        original.addItem().setK("key1").setV("val1");
+        original.addItem().setK("key2").setV("val2").setXx().setN(42);
+
+        String json = original.toJson();
+        M parsed = new M();
+        parsed.parseFromJson(json);
+
+        assertArrayEquals(original.toByteArray(), parsed.toByteArray());
+    }
+
+    @Test
+    public void testBytesRoundTrip() throws Exception {
+        B original = new B();
+        original.setPayload(new byte[]{1, 2, 3, 4, 5});
+
+        String json = original.toJson();
+        B parsed = new B();
+        parsed.parseFromJson(json);
+
+        assertArrayEquals(original.toByteArray(), parsed.toByteArray());
+    }
+
+    @Test
+    public void testMapRoundTrip() throws Exception {
+        MapMessage original = new MapMessage();
+        original.putStringToInt("a", 1);
+        original.putStringToInt("b", 2);
+        original.putIntToString(10, "ten");
+        original.putIntToString(20, "twenty");
+        original.putStringToDouble("pi", 3.14);
+        original.setName("test-map");
+
+        String json = original.toJson();
+        MapMessage parsed = new MapMessage();
+        parsed.parseFromJson(json);
+
+        assertArrayEquals(original.toByteArray(), parsed.toByteArray());
+    }
+
+    @Test
+    public void testEmptyMessageRoundTrip() throws Exception {
+        Numbers original = new Numbers();
+        String json = original.toJson();
+        assertEquals("{}", json);
+
+        Numbers parsed = new Numbers();
+        parsed.parseFromJson(json);
+        assertArrayEquals(original.toByteArray(), parsed.toByteArray());
+    }
+
+    @Test
+    public void testStringEscapingRoundTrip() throws Exception {
+        S original = new S();
+        original.setId("hello \"world\"\nnew\tline\\slash");
+
+        String json = original.toJson();
+        S parsed = new S();
+        parsed.parseFromJson(json);
+
+        assertEquals(original.getId(), parsed.getId());
+    }
+
+    // ==================== Cross-compat: protobuf JSON -> LightProto parseFromJson ====================
+
+    @Test
+    public void testParseProtobufJson() throws Exception {
+        NumbersOuterClass.Numbers pbNumbers = NumbersOuterClass.Numbers.newBuilder()
+                .setXInt32(42)
+                .setXInt64(123456789L)
+                .setXUint32(100)
+                .setXUint64(200L)
+                .setXSint32(-50)
+                .setXSint64(-100L)
+                .setXFixed32(1000)
+                .setXFixed64(2000L)
+                .setXSfixed32(-1000)
+                .setXSfixed64(-2000L)
+                .setXFloat(3.14f)
+                .setXDouble(2.71828)
+                .setXBool(true)
+                .setEnum1(NumbersOuterClass.Enum1.X1_1)
+                .setEnum2(NumbersOuterClass.Numbers.Enum2.X2_2)
+                .build();
+
+        String pbJson = JsonFormat.printer().omittingInsignificantWhitespace().print(pbNumbers);
+
+        Numbers lpNumbers = new Numbers();
+        lpNumbers.parseFromJson(pbJson);
+
+        assertEquals(42, lpNumbers.getXInt32());
+        assertEquals(123456789L, lpNumbers.getXInt64());
+        assertEquals(100, lpNumbers.getXUint32());
+        assertEquals(200L, lpNumbers.getXUint64());
+        assertEquals(-50, lpNumbers.getXSint32());
+        assertEquals(-100L, lpNumbers.getXSint64());
+        assertEquals(1000, lpNumbers.getXFixed32());
+        assertEquals(2000L, lpNumbers.getXFixed64());
+        assertEquals(-1000, lpNumbers.getXSfixed32());
+        assertEquals(-2000L, lpNumbers.getXSfixed64());
+        assertEquals(3.14f, lpNumbers.getXFloat(), 0.001f);
+        assertEquals(2.71828, lpNumbers.getXDouble(), 0.00001);
+        assertTrue(lpNumbers.isXBool());
+        assertEquals(Enum1.X1_1, lpNumbers.getEnum1());
+        assertEquals(Numbers.Enum2.X2_2, lpNumbers.getEnum2());
+    }
+
+    @Test
+    public void testParseProtobufJsonNestedMessage() throws Exception {
+        Messages.M pbM = Messages.M.newBuilder()
+                .setX(Messages.X.newBuilder().setA("value-a").setB("value-b"))
+                .addItems(Messages.M.KV.newBuilder().setK("key1").setV("val1"))
+                .addItems(Messages.M.KV.newBuilder().setK("key2").setV("val2")
+                        .setXx(Messages.M.KV.XX.newBuilder().setN(42)))
+                .build();
+
+        String pbJson = JsonFormat.printer().omittingInsignificantWhitespace().print(pbM);
+
+        M lpM = new M();
+        lpM.parseFromJson(pbJson);
+
+        assertEquals("value-a", lpM.getX().getA());
+        assertEquals("value-b", lpM.getX().getB());
+        assertEquals(2, lpM.getItemsCount());
+        assertEquals("key1", lpM.getItemAt(0).getK());
+        assertEquals("val1", lpM.getItemAt(0).getV());
+        assertEquals("key2", lpM.getItemAt(1).getK());
+        assertEquals("val2", lpM.getItemAt(1).getV());
+        assertEquals(42, lpM.getItemAt(1).getXx().getN());
+    }
+
+    @Test
+    public void testParseFromJsonByteBuf() throws Exception {
+        Numbers original = new Numbers()
+                .setXInt32(99)
+                .setXBool(true);
+
+        String json = original.toJson();
+        io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.wrappedBuffer(
+                json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        Numbers parsed = new Numbers();
+        parsed.parseFromJson(buf);
+
+        assertEquals(99, parsed.getXInt32());
+        assertTrue(parsed.isXBool());
+        buf.release();
+    }
+
+    @Test
+    public void testUnknownFieldsIgnored() throws Exception {
+        // JSON with extra unknown fields should be silently ignored
+        String json = "{\"xInt32\":42,\"unknownField\":\"ignored\",\"xBool\":true}";
+        Numbers parsed = new Numbers();
+        parsed.parseFromJson(json);
+
+        assertEquals(42, parsed.getXInt32());
+        assertTrue(parsed.isXBool());
+    }
 }
