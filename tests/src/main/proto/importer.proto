@@ -1,0 +1,13 @@
+syntax = "proto2";
+package importer;
+
+import "imported.proto";
+
+option java_package = "io.streamnative.lightproto.tests.importer";
+option java_outer_classname = "ImporterProtos";
+
+message Container {
+    optional string label = 1;
+    optional imported.SharedItem item = 2;
+    repeated imported.SharedItem items = 3;
+}

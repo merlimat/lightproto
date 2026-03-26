@@ -690,25 +690,22 @@ class LightProtoCodec {
      * Supports the subset of JSON used by protobuf's JsonFormat.
      */
     static final class JsonReader {
-        private final byte[] data;
-        private int pos;
+        private final ByteBuf buf;
 
-        JsonReader(byte[] data) {
-            this.data = data;
-            this.pos = 0;
+        JsonReader(ByteBuf buf) {
+            this.buf = buf;
         }
 
-        JsonReader(ByteBuf b) {
-            this.data = new byte[b.readableBytes()];
-            b.getBytes(b.readerIndex(), this.data);
-            this.pos = 0;
-        }
+        ByteBuf buf() { return buf; }
+
+        private int readable() { return buf.readableBytes(); }
+        private byte at(int offset) { return buf.getByte(buf.readerIndex() + offset); }
 
         void skipWhitespace() {
-            while (pos < data.length) {
-                byte c = data[pos];
+            while (readable() > 0) {
+                byte c = at(0);
                 if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-                    pos++;
+                    buf.skipBytes(1);
                 } else {
                     break;
                 }
@@ -717,26 +714,26 @@ class LightProtoCodec {
 
         byte peek() {
             skipWhitespace();
-            if (pos >= data.length) {
+            if (readable() <= 0) {
                 throw new IllegalArgumentException("Unexpected end of JSON");
             }
-            return data[pos];
+            return at(0);
         }
 
         void expect(byte expected) {
             skipWhitespace();
-            if (pos >= data.length || data[pos] != expected) {
+            if (readable() <= 0 || at(0) != expected) {
                 throw new IllegalArgumentException("Expected '" + (char) expected
-                        + "' at position " + pos + " but found "
-                        + (pos < data.length ? "'" + (char) data[pos] + "'" : "end of input"));
+                        + "' at position " + buf.readerIndex() + " but found "
+                        + (readable() > 0 ? "'" + (char) at(0) + "'" : "end of input"));
             }
-            pos++;
+            buf.skipBytes(1);
         }
 
         boolean tryConsume(byte expected) {
             skipWhitespace();
-            if (pos < data.length && data[pos] == expected) {
-                pos++;
+            if (readable() > 0 && at(0) == expected) {
+                buf.skipBytes(1);
                 return true;
             }
             return false;
@@ -749,16 +746,16 @@ class LightProtoCodec {
         String readString() {
             expect((byte) '"');
             StringBuilder sb = new StringBuilder();
-            while (pos < data.length) {
-                byte c = data[pos++];
+            while (readable() > 0) {
+                byte c = buf.readByte();
                 if (c == '"') {
                     return sb.toString();
                 }
                 if (c == '\\') {
-                    if (pos >= data.length) {
+                    if (readable() <= 0) {
                         throw new IllegalArgumentException("Unexpected end of JSON in string escape");
                     }
-                    byte esc = data[pos++];
+                    byte esc = buf.readByte();
                     switch (esc) {
                         case '"': sb.append('"'); break;
                         case '\\': sb.append('\\'); break;
@@ -769,13 +766,13 @@ class LightProtoCodec {
                         case 'r': sb.append('\r'); break;
                         case 't': sb.append('\t'); break;
                         case 'u':
-                            if (pos + 4 > data.length) {
+                            if (readable() < 4) {
                                 throw new IllegalArgumentException("Incomplete \\u escape");
                             }
-                            int cp = Integer.parseInt(new String(data, pos, 4,
-                                    java.nio.charset.StandardCharsets.US_ASCII), 16);
+                            byte[] hex = new byte[4];
+                            buf.readBytes(hex);
+                            int cp = Integer.parseInt(new String(hex, java.nio.charset.StandardCharsets.US_ASCII), 16);
                             sb.append((char) cp);
-                            pos += 4;
                             break;
                         default:
                             throw new IllegalArgumentException("Invalid escape: \\" + (char) esc);
@@ -785,16 +782,16 @@ class LightProtoCodec {
                     if ((c & 0x80) == 0) {
                         sb.append((char) c);
                     } else if ((c & 0xE0) == 0xC0) {
-                        int c2 = data[pos++] & 0xFF;
+                        int c2 = buf.readByte() & 0xFF;
                         sb.append((char) (((c & 0x1F) << 6) | (c2 & 0x3F)));
                     } else if ((c & 0xF0) == 0xE0) {
-                        int c2 = data[pos++] & 0xFF;
-                        int c3 = data[pos++] & 0xFF;
+                        int c2 = buf.readByte() & 0xFF;
+                        int c3 = buf.readByte() & 0xFF;
                         sb.append((char) (((c & 0x0F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F)));
                     } else if ((c & 0xF8) == 0xF0) {
-                        int c2 = data[pos++] & 0xFF;
-                        int c3 = data[pos++] & 0xFF;
-                        int c4 = data[pos++] & 0xFF;
+                        int c2 = buf.readByte() & 0xFF;
+                        int c3 = buf.readByte() & 0xFF;
+                        int c4 = buf.readByte() & 0xFF;
                         int codePoint = ((c & 0x07) << 18) | ((c2 & 0x3F) << 12)
                                 | ((c3 & 0x3F) << 6) | (c4 & 0x3F);
                         sb.appendCodePoint(codePoint);
@@ -811,21 +808,24 @@ class LightProtoCodec {
         String readNumberToken() {
             skipWhitespace();
             boolean quoted = false;
-            if (pos < data.length && data[pos] == '"') {
+            if (readable() > 0 && at(0) == '"') {
                 quoted = true;
-                pos++;
+                buf.skipBytes(1);
             }
-            int start = pos;
-            while (pos < data.length) {
-                byte c = data[pos];
+            int start = buf.readerIndex();
+            while (readable() > 0) {
+                byte c = at(0);
                 if (c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E'
                         || (c >= '0' && c <= '9')) {
-                    pos++;
+                    buf.skipBytes(1);
                 } else {
                     break;
                 }
             }
-            String token = new String(data, start, pos - start, java.nio.charset.StandardCharsets.US_ASCII);
+            int len = buf.readerIndex() - start;
+            byte[] tokenBytes = new byte[len];
+            buf.getBytes(start, tokenBytes);
+            String token = new String(tokenBytes, java.nio.charset.StandardCharsets.US_ASCII);
             if (quoted) {
                 expect((byte) '"');
             }
@@ -842,7 +842,7 @@ class LightProtoCodec {
 
         float readFloat() {
             skipWhitespace();
-            if (pos < data.length && data[pos] == '"') {
+            if (readable() > 0 && at(0) == '"') {
                 // Handle special float values: "NaN", "Infinity", "-Infinity"
                 String s = readString();
                 return Float.parseFloat(s);
@@ -852,7 +852,7 @@ class LightProtoCodec {
 
         double readDouble() {
             skipWhitespace();
-            if (pos < data.length && data[pos] == '"') {
+            if (readable() > 0 && at(0) == '"') {
                 String s = readString();
                 return Double.parseDouble(s);
             }
@@ -861,17 +861,17 @@ class LightProtoCodec {
 
         boolean readBool() {
             skipWhitespace();
-            if (pos + 4 <= data.length && data[pos] == 't' && data[pos + 1] == 'r'
-                    && data[pos + 2] == 'u' && data[pos + 3] == 'e') {
-                pos += 4;
+            if (readable() >= 4 && at(0) == 't' && at(1) == 'r'
+                    && at(2) == 'u' && at(3) == 'e') {
+                buf.skipBytes(4);
                 return true;
             }
-            if (pos + 5 <= data.length && data[pos] == 'f' && data[pos + 1] == 'a'
-                    && data[pos + 2] == 'l' && data[pos + 3] == 's' && data[pos + 4] == 'e') {
-                pos += 5;
+            if (readable() >= 5 && at(0) == 'f' && at(1) == 'a'
+                    && at(2) == 'l' && at(3) == 's' && at(4) == 'e') {
+                buf.skipBytes(5);
                 return false;
             }
-            throw new IllegalArgumentException("Expected 'true' or 'false' at position " + pos);
+            throw new IllegalArgumentException("Expected 'true' or 'false' at position " + buf.readerIndex());
         }
 
         /**
@@ -887,12 +887,12 @@ class LightProtoCodec {
          */
         void skipValue() {
             skipWhitespace();
-            if (pos >= data.length) return;
-            byte c = data[pos];
+            if (readable() <= 0) return;
+            byte c = at(0);
             if (c == '"') {
                 readString();
             } else if (c == '{') {
-                pos++;
+                buf.skipBytes(1);
                 if (!tryConsume((byte) '}')) {
                     do {
                         readString(); // key
@@ -902,7 +902,7 @@ class LightProtoCodec {
                     expect((byte) '}');
                 }
             } else if (c == '[') {
-                pos++;
+                buf.skipBytes(1);
                 if (!tryConsume((byte) ']')) {
                     do {
                         skipValue();
@@ -913,11 +913,11 @@ class LightProtoCodec {
                 readBool();
             } else if (c == 'n') {
                 // null
-                if (pos + 4 <= data.length && data[pos + 1] == 'u'
-                        && data[pos + 2] == 'l' && data[pos + 3] == 'l') {
-                    pos += 4;
+                if (readable() >= 4 && at(1) == 'u'
+                        && at(2) == 'l' && at(3) == 'l') {
+                    buf.skipBytes(4);
                 } else {
-                    throw new IllegalArgumentException("Invalid token at position " + pos);
+                    throw new IllegalArgumentException("Invalid token at position " + buf.readerIndex());
                 }
             } else {
                 // number
@@ -927,7 +927,7 @@ class LightProtoCodec {
 
         boolean isEof() {
             skipWhitespace();
-            return pos >= data.length;
+            return readable() <= 0;
         }
     }
 }

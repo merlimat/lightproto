@@ -313,17 +313,14 @@ public class LightProtoMessage {
         // Public API: parseFromJson(byte[])
         w.println("        /** Deserialize this message from a JSON byte array. */");
         w.println("        @Override public void parseFromJson(byte[] _a) {");
-        w.println("            clear();");
-        w.println("            LightProtoCodec.JsonReader _r = new LightProtoCodec.JsonReader(_a);");
-        w.println("            _parseJsonObject(_r);");
+        w.println("            parseFromJson(io.netty.buffer.Unpooled.wrappedBuffer(_a));");
         w.println("        }");
 
         // Public API: parseFromJson(ByteBuf)
         w.println("        /** Deserialize this message from a JSON-encoded ByteBuf. */");
         w.println("        @Override public void parseFromJson(io.netty.buffer.ByteBuf _b) {");
         w.println("            clear();");
-        w.println("            LightProtoCodec.JsonReader _r = new LightProtoCodec.JsonReader(_b);");
-        w.println("            _parseJsonObject(_r);");
+        w.println("            _parseJsonObject(new LightProtoCodec.JsonReader(_b));");
         w.println("        }");
 
         // Convenience: parseFromJson(String)
@@ -332,7 +329,7 @@ public class LightProtoMessage {
         w.println("            parseFromJson(_json.getBytes(java.nio.charset.StandardCharsets.UTF_8));");
         w.println("        }");
 
-        // Internal: _parseJsonObject(JsonReader) — used by nested messages
+        // Package-private: _parseJsonObject(JsonReader) — used within same package
         w.format("        void _parseJsonObject(LightProtoCodec.JsonReader _r) {\n");
         w.format("            _r.expect((byte) '{');\n");
         w.format("            if (_r.tryConsume((byte) '}')) { return; }\n");

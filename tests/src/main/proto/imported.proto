@@ -1,0 +1,10 @@
+syntax = "proto2";
+package imported;
+
+option java_package = "io.streamnative.lightproto.tests.imported";
+option java_outer_classname = "ImportedProtos";
+
+message SharedItem {
+    optional string name = 1;
+    optional int32 value = 2;
+}

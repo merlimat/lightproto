@@ -596,7 +596,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
 
         // Read value
         if (isMessageValue()) {
-            w.format("                        %s(_key)._parseJsonObject(_r);\n", Util.camelCase("put", ccName));
+            w.format("                        %s(_key).parseFromJson(_r.buf());\n", Util.camelCase("put", ccName));
         } else if (isStringValue()) {
             w.format("                        %s(_key, _r.readString());\n", Util.camelCase("put", ccName));
         } else if (isBytesValue()) {

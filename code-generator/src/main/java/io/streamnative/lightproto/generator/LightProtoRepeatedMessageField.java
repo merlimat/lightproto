@@ -95,7 +95,7 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
         w.format("                _r.expect((byte) '[');\n");
         w.format("                if (!_r.tryConsume((byte) ']')) {\n");
         w.format("                    do {\n");
-        w.format("                        %s()._parseJsonObject(_r);\n", Util.camelCase("add", singularName));
+        w.format("                        %s().parseFromJson(_r.buf());\n", Util.camelCase("add", singularName));
         w.format("                    } while (_r.tryConsume((byte) ','));\n");
         w.format("                    _r.expect((byte) ']');\n");
         w.format("                }\n");

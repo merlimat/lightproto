@@ -83,7 +83,7 @@ public class LightProtoMessageField extends LightProtoField {
 
     @Override
     public void parseJson(PrintWriter w) {
-        w.format("                %s()._parseJsonObject(_r);\n", Util.camelCase("set", ccName));
+        w.format("                %s().parseFromJson(_r.buf());\n", Util.camelCase("set", ccName));
     }
 
     @Override
