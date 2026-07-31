@@ -109,6 +109,34 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void serializeToBuf(PrintWriter w) {
+        int fixedSize = LightProtoNumberField.fixedDataSize(field);
+        if (field.isPacked()) {
+            w.format("    %s;\n", writeTagToBufExpr(tagName() + "_PACKED"));
+            if (fixedSize >= 0) {
+                w.format("    LightProtoCodec.writeVarInt(_b, _%sCount * %d);\n", pluralName, fixedSize);
+            } else {
+                w.format("    int _%sSize = 0;\n", pluralName);
+                w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+                w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+                w.format("    _%sSize += %s;\n", pluralName, LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
+                w.format("}\n");
+                w.format("    LightProtoCodec.writeVarInt(_b, _%sSize);\n", pluralName);
+            }
+            w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+            w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+            LightProtoNumberField.serializeNumberToBuf(w, field, "_item");
+            w.format("}\n");
+        } else {
+            w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+            w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+            w.format("    %s;\n", writeTagToBufExpr(tagName()));
+            LightProtoNumberField.serializeNumberToBuf(w, field, "_item");
+            w.format("}\n");
+        }
+    }
+
+    @Override
     public void serializeJson(PrintWriter w) {
         w.format("_b.writeByte('[');\n");
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);

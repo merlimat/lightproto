@@ -394,12 +394,15 @@ class LightProtoCodec {
     // Serialization composes into a plain byte[] with an int cursor: heap buffers
     // are written in place through their backing array, other buffer types are
     // composed in a reusable scratch array and transferred with a single bulk
-    // writeBytes(). Plain array stores compile to raw memory accesses on every JDK
-    // (no sun.misc.Unsafe in the hot loop — its memory-access methods carry a
-    // per-call deprecation check since JDK 24).
+    // writeBytes(). Messages larger than SCRATCH_RETAIN_MAX skip the scratch and
+    // write through the ByteBuf API field by field instead. Plain array stores
+    // compile to raw memory accesses on every JDK (no sun.misc.Unsafe in the hot
+    // loop — its memory-access methods carry a per-call deprecation check since
+    // JDK 24).
 
-    // Scratch arrays larger than this are not retained on the message instance,
-    // so outlier messages don't pin large allocations.
+    // Messages larger than this serialize field by field through the ByteBuf API
+    // instead of composing in a scratch array, so outlier messages neither pin
+    // nor churn large heap allocations.
     static final int SCRATCH_RETAIN_MAX = 1024 * 1024;
 
     /** Returns current if it can hold size bytes, otherwise a larger replacement. */
@@ -408,8 +411,8 @@ class LightProtoCodec {
             return current;
         }
         if (size > SCRATCH_RETAIN_MAX) {
-            // The result won't be retained, so growth amortization is pointless:
-            // allocate exactly what this outlier message needs.
+            // Not reached from generated code (outlier messages write through the
+            // ByteBuf API instead); kept so the size contract holds for any caller.
             return new byte[size];
         }
         // Double to amortize growth, but never past the retain cap: otherwise

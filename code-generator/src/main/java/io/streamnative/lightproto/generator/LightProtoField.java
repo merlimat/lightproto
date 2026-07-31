@@ -155,6 +155,13 @@ public abstract class LightProtoField {
 
     abstract public void serialize(PrintWriter w);
 
+    /**
+     * Emit code that writes this field through the ByteBuf API ({@code _b}): the
+     * allocation-free path used for messages too large to stage in a scratch array.
+     * Must produce bytes identical to {@link #serialize(PrintWriter)}.
+     */
+    abstract public void serializeToBuf(PrintWriter w);
+
     abstract public void serializeJson(PrintWriter w);
 
     abstract public void parseJson(PrintWriter w);
@@ -217,6 +224,14 @@ public abstract class LightProtoField {
             return String.format("_i = LightProtoCodec.writeRawByte(_a, _i, %s)", tag);
         } else {
             return String.format("_i = LightProtoCodec.writeRawVarInt(_a, _i, %s)", tag);
+        }
+    }
+
+    protected String writeTagToBufExpr(String tag) {
+        if (field.getNumber() <= 15) {
+            return String.format("_b.writeByte(%s)", tag);
+        } else {
+            return String.format("LightProtoCodec.writeVarInt(_b, %s)", tag);
         }
     }
 

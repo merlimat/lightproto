@@ -80,6 +80,40 @@ public class LightProtoNumberField extends LightProtoField {
         }
     }
 
+    static void serializeNumberToBuf(PrintWriter w, ProtoFieldDescriptor field, String name) {
+        if (field.isEnumField()) {
+            w.format("                LightProtoCodec.writeVarInt(_b, %s.getValue());\n", name);
+        } else if (field.getProtoType().equals("bool")) {
+            w.format("                _b.writeByte(%s ? 1 : 0);\n", name);
+        } else if (field.getProtoType().equals("int32")) {
+            w.format("                LightProtoCodec.writeVarInt(_b, %s);\n", name);
+        } else if (field.getProtoType().equals("uint32")) {
+            w.format("                LightProtoCodec.writeVarInt(_b, %s);\n", name);
+        } else if (field.getProtoType().equals("sint32")) {
+            w.format("                LightProtoCodec.writeSignedVarInt(_b, %s);\n", name);
+        } else if (field.getProtoType().equals("sint64")) {
+            w.format("                LightProtoCodec.writeSignedVarInt64(_b, %s);\n", name);
+        } else if (field.getProtoType().equals("int64")) {
+            w.format("                LightProtoCodec.writeVarInt64(_b, %s);\n", name);
+        } else if (field.getProtoType().equals("uint64")) {
+            w.format("                LightProtoCodec.writeVarInt64(_b, %s);\n", name);
+        } else if (field.getProtoType().equals("fixed32")) {
+            w.format("                LightProtoCodec.writeFixedInt32(_b, %s);\n", name);
+        } else if (field.getProtoType().equals("fixed64")) {
+            w.format("                LightProtoCodec.writeFixedInt64(_b, %s);\n", name);
+        } else if (field.getProtoType().equals("sfixed32")) {
+            w.format("                LightProtoCodec.writeFixedInt32(_b, %s);\n", name);
+        } else if (field.getProtoType().equals("sfixed64")) {
+            w.format("                LightProtoCodec.writeFixedInt64(_b, %s);\n", name);
+        } else if (field.getProtoType().equals("double")) {
+            w.format("                LightProtoCodec.writeDouble(_b, %s);\n", name);
+        } else if (field.getProtoType().equals("float")) {
+            w.format("                LightProtoCodec.writeFloat(_b, %s);\n", name);
+        } else {
+            throw new IllegalArgumentException("Failed to write serializer for field: " + field.getProtoType());
+        }
+    }
+
     static String parseNumber(ProtoFieldDescriptor field) {
         if (field.isEnumField()) {
             return String.format("%s.valueOf(LightProtoCodec.readVarInt(_buffer))", field.getJavaType());
@@ -191,6 +225,12 @@ public class LightProtoNumberField extends LightProtoField {
     public void serialize(PrintWriter w) {
         w.format("%s;\n", writeTagExpr(tagName()));
         serializeNumber(w, field, ccName);
+    }
+
+    @Override
+    public void serializeToBuf(PrintWriter w) {
+        w.format("%s;\n", writeTagToBufExpr(tagName()));
+        serializeNumberToBuf(w, field, ccName);
     }
 
     @Override

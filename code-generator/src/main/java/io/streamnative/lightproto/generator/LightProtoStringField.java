@@ -103,6 +103,17 @@ public class LightProtoStringField extends LightProtoField {
     }
 
     @Override
+    public void serializeToBuf(PrintWriter w) {
+        w.format("%s;\n", writeTagToBufExpr(tagName()));
+        w.format("LightProtoCodec.writeVarInt(_b, _%sBufferLen);\n", ccName);
+        w.format("if (_%sBufferIdx == -1) {\n", ccName);
+        w.format("    LightProtoCodec.writeString(_b, %s, _%sBufferLen);\n", ccName, ccName);
+        w.format("} else {\n");
+        w.format("    _parsedBuffer.getBytes(_%sBufferIdx, _b, _%sBufferLen);\n", ccName, ccName);
+        w.format("}\n");
+    }
+
+    @Override
     public void serializeJson(PrintWriter w) {
         w.format("LightProtoCodec.writeJsonString(_b, %s());\n", Util.camelCase("get", field.getName()));
     }

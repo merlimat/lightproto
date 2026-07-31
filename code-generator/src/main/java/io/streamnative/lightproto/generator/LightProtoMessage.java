@@ -376,16 +376,23 @@ public class LightProtoMessage {
         w.format("                int _writeIdx = _b.writerIndex();\n");
         w.format("                _writeTo(_b.array(), _b.arrayOffset() + _writeIdx);\n");
         w.format("                _b.writerIndex(_writeIdx + _serializedSize);\n");
+        w.format("            } else if (_serializedSize > LightProtoCodec.SCRATCH_RETAIN_MAX) {\n");
+        // Messages too large for a retained scratch array write through the
+        // ByteBuf API field by field: slower per element, but allocation-free.
+        // Staging them would allocate a fresh full-size heap array on every
+        // write (multi-MB arrays are G1 humongous allocations), invisible to
+        // any direct-memory accounting sized to the target buffer.
+        w.format("                _b.ensureWritable(_serializedSize);\n");
+        w.format("                _writeTo(_b);\n");
         w.format("            } else {\n");
         // Direct, composite and other buffers: compose in a scratch array cached
         // on this (typically pooled) instance and transfer with a single bulk
         // write. Plain byte[] stores compile to raw memory accesses on every JDK,
         // unlike sun.misc.Unsafe accesses which carry a per-call deprecation
-        // check since JDK 24.
+        // check since JDK 24. The dispatch above bounds _serializedSize by
+        // SCRATCH_RETAIN_MAX, so the scratch is always retainable.
         w.format("                byte[] _s = LightProtoCodec.scratchFor(this._scratch, _serializedSize);\n");
-        w.format("                if (_s.length <= LightProtoCodec.SCRATCH_RETAIN_MAX) {\n");
-        w.format("                    this._scratch = _s;\n");
-        w.format("                }\n");
+        w.format("                this._scratch = _s;\n");
         w.format("                _writeTo(_s, 0);\n");
         w.format("                _b.writeBytes(_s, 0, _serializedSize);\n");
         w.format("            }\n");
@@ -422,6 +429,37 @@ public class LightProtoMessage {
         }
 
         w.format("            return _i;\n");
+        w.format("        }\n");
+
+        w.println("        /**");
+        w.println("         * Internal: serialize this message field by field through the ByteBuf");
+        w.println("         * API. The allocation-free path for messages larger than");
+        w.println("         * {@code SCRATCH_RETAIN_MAX}; nested messages write through as well, so");
+        w.println("         * no element of the tree stages in a scratch array. Public only so that");
+        w.println("         * generated messages in other packages can serialize nested fields of");
+        w.println("         * this type into the same buffer.");
+        w.println("         */");
+        w.format("        public void _writeTo(io.netty.buffer.ByteBuf _b) {\n");
+        if (hasRequiredFields()) {
+            w.format("            checkRequiredFields();\n");
+        }
+        if (useBitDrivenTraversal()) {
+            // Same set-bit traversal as the array path: field order — and bytes —
+            // must match it exactly.
+            emitBitDrivenTraversal(w, f -> f.serializeToBuf(w));
+        } else {
+            for (LightProtoField f : fields) {
+                String condition = f.serializeCondition();
+                if (condition != null) {
+                    w.format("            if (%s) {\n", condition);
+                    f.serializeToBuf(w);
+                    w.format("            }\n");
+                } else {
+                    f.serializeToBuf(w);
+                }
+            }
+        }
+
         w.format("        }\n");
     }
 

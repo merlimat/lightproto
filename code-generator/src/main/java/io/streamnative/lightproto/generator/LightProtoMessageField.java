@@ -105,6 +105,15 @@ public class LightProtoMessageField extends LightProtoField {
     }
 
     @Override
+    public void serializeToBuf(PrintWriter w) {
+        // Nested messages write through as well, so no element of the tree
+        // stages in a scratch array.
+        w.format("%s;\n", writeTagToBufExpr(tagName()));
+        w.format("LightProtoCodec.writeVarInt(_b, %s.getSerializedSize());\n", ccName);
+        w.format("%s._writeTo(_b);\n", ccName);
+    }
+
+    @Override
     public void clear(PrintWriter w) {
         w.format("if (%s()){\n", Util.camelCase("has", ccName));
         w.format("    %s.clear();\n", ccName);

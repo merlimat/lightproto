@@ -858,6 +858,36 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         }
     }
 
+    @Override
+    public void serializeToBuf(PrintWriter w) {
+        w.format("for (int _entryIdx = 0; _entryIdx < _%sCount; _entryIdx++) {\n", ccName);
+
+        // Compute entry size
+        w.format("    int _entrySize = 0;\n");
+
+        // Key size: 1 (tag) + data size
+        w.format("    _entrySize += 1;\n"); // key tag is always 1 byte
+        generateKeyDataSize(w, "_entryIdx");
+
+        // Value size: 1 (tag) + data size
+        w.format("    _entrySize += 1;\n"); // value tag is always 1 byte
+        generateValueDataSize(w, "_entryIdx");
+
+        // Write outer tag + entry size
+        w.format("    %s;\n", writeTagToBufExpr(tagName()));
+        w.format("    LightProtoCodec.writeVarInt(_b, _entrySize);\n");
+
+        // Write key tag + key data
+        w.format("    _b.writeByte(%s);\n", keyTagConstant());
+        generateSerializeKeyDataToBuf(w, "_entryIdx");
+
+        // Write value tag + value data
+        w.format("    _b.writeByte(%s);\n", valueTagConstant());
+        generateSerializeValueDataToBuf(w, "_entryIdx");
+
+        w.format("}\n");
+    }
+
     private void generateSerializeKeyData(PrintWriter w, String idxVar) {
         if (isStringKey()) {
             w.format("    LightProtoCodec.StringHolder _ksh = _%sKeys[%s];\n", ccName, idxVar);
@@ -898,6 +928,46 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    _i = _%sValues[%s]._writeTo(_a, _i);\n", ccName, idxVar);
         } else {
             LightProtoNumberField.serializeNumber(w, valueField, String.format("_%sValues[%s]", ccName, idxVar));
+        }
+    }
+
+    private void generateSerializeKeyDataToBuf(PrintWriter w, String idxVar) {
+        if (isStringKey()) {
+            w.format("    LightProtoCodec.StringHolder _ksh = _%sKeys[%s];\n", ccName, idxVar);
+            w.format("    LightProtoCodec.writeVarInt(_b, _ksh.len);\n");
+            w.format("    if (_ksh.idx == -1) {\n");
+            w.format("        LightProtoCodec.writeString(_b, _ksh.s, _ksh.len);\n");
+            w.format("    } else {\n");
+            w.format("        _parsedBuffer.getBytes(_ksh.idx, _b, _ksh.len);\n");
+            w.format("    }\n");
+        } else {
+            LightProtoNumberField.serializeNumberToBuf(w, keyField, String.format("_%sKeys[%s]", ccName, idxVar));
+        }
+    }
+
+    private void generateSerializeValueDataToBuf(PrintWriter w, String idxVar) {
+        if (isStringValue()) {
+            w.format("    LightProtoCodec.StringHolder _vsh = _%sValues[%s];\n", ccName, idxVar);
+            w.format("    LightProtoCodec.writeVarInt(_b, _vsh.len);\n");
+            w.format("    if (_vsh.idx == -1) {\n");
+            w.format("        LightProtoCodec.writeString(_b, _vsh.s, _vsh.len);\n");
+            w.format("    } else {\n");
+            w.format("        _parsedBuffer.getBytes(_vsh.idx, _b, _vsh.len);\n");
+            w.format("    }\n");
+        } else if (isBytesValue()) {
+            w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[%s];\n", ccName, idxVar);
+            w.format("    LightProtoCodec.writeVarInt(_b, _vbh.len);\n");
+            w.format("    if (_vbh.idx == -1) {\n");
+            w.format("        _vbh.b.getBytes(_vbh.b.readerIndex(), _b, _vbh.len);\n");
+            w.format("    } else {\n");
+            w.format("        _parsedBuffer.getBytes(_vbh.idx, _b, _vbh.len);\n");
+            w.format("    }\n");
+        } else if (isMessageValue()) {
+            w.format("    LightProtoCodec.writeVarInt(_b, _%sValues[%s].getSerializedSize());\n",
+                    ccName, idxVar);
+            w.format("    _%sValues[%s]._writeTo(_b);\n", ccName, idxVar);
+        } else {
+            LightProtoNumberField.serializeNumberToBuf(w, valueField, String.format("_%sValues[%s]", ccName, idxVar));
         }
     }
 

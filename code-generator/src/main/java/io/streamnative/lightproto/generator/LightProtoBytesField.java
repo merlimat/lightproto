@@ -157,6 +157,18 @@ public class LightProtoBytesField extends LightProtoField {
         w.format("_i += _%sLen;\n", ccName);
     }
 
+    @Override
+    public void serializeToBuf(PrintWriter w) {
+        w.format("%s;\n", writeTagToBufExpr(tagName()));
+        w.format("LightProtoCodec.writeVarInt(_b, _%sLen);\n", ccName);
+        w.format("if (_%sIdx == -1) {\n", ccName);
+        // Absolute-indexed copy for the same reason as the array path.
+        w.format("    %s.getBytes(%s.readerIndex(), _b, _%sLen);\n", ccName, ccName, ccName);
+        w.format("} else {\n");
+        w.format("    _parsedBuffer.getBytes(_%sIdx, _b, _%sLen);\n", ccName, ccName);
+        w.format("}\n");
+    }
+
 
     @Override
     public void materialize(PrintWriter w) {

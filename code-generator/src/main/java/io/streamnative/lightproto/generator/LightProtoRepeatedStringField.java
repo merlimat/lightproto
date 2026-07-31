@@ -96,6 +96,20 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void serializeToBuf(PrintWriter w) {
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    LightProtoCodec.StringHolder _sh = %s[i];\n", pluralName);
+        w.format("    %s;\n", writeTagToBufExpr(tagName()));
+        w.format("    LightProtoCodec.writeVarInt(_b, _sh.len);\n");
+        w.format("    if (_sh.idx == -1) {\n");
+        w.format("        LightProtoCodec.writeString(_b, _sh.s, _sh.len);\n");
+        w.format("    } else {\n");
+        w.format("        _parsedBuffer.getBytes(_sh.idx, _b, _sh.len);\n");
+        w.format("    }\n");
+        w.format("}\n");
+    }
+
+    @Override
     public void serializeJson(PrintWriter w) {
         w.format("_b.writeByte('[');\n");
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
