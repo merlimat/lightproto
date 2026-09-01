@@ -184,6 +184,20 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void clearRelease(PrintWriter w) {
+        // Forced recursion — see LightProtoMessageField#clearRelease.
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    %s[i]._clearAndRelease();\n", pluralName);
+        w.format("}\n");
+        w.format("_%sCount = 0;\n", pluralName);
+    }
+
+    @Override
+    public boolean needsRelease() {
+        return true;
+    }
+
+    @Override
     public void materialize(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    %s[i].materialize();\n", pluralName);
