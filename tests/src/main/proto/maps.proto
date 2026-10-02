@@ -8,6 +8,11 @@ message MapNestedValue {
     optional string name = 2;
 }
 
+enum MapEnumValue {
+    MAP_ENUM_ZERO = 0;
+    MAP_ENUM_ONE = 1;
+}
+
 message MapMessage {
     map<string, int32> string_to_int = 1;
     map<int32, string> int_to_string = 2;
@@ -15,5 +20,6 @@ message MapMessage {
     map<string, bytes> string_to_bytes = 4;
     map<bool, string> bool_to_string = 5;
     map<string, double> string_to_double = 6;
+    map<string, MapEnumValue> string_to_enum = 7;
     optional string name = 10;
 }
