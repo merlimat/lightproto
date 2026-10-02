@@ -496,6 +496,54 @@ public class MapsTest {
         assertEquals("gp-test", lpParsed.getName());
     }
 
+    // --- Text format entries ---
+    // protobuf-java reads a text format entry without a value as the default value, and a
+    // key repeated in a later entry takes the value of the last one.
+
+    @Test
+    public void testTextFormatMapEntriesWithoutValue() throws Exception {
+        // An entry with a key and no value in every map
+        String text = "string_to_int { key: \"i\" }\n"
+                + "int_to_string { key: 1 }\n"
+                + "string_to_msg { key: \"m\" }\n"
+                + "string_to_bytes { key: \"b\" }\n"
+                + "bool_to_string { key: true }\n"
+                + "string_to_double { key: \"d\" }\n"
+                + "string_to_enum { key: \"e\" }\n";
+
+        MapsProtos.MapMessage.Builder b = MapsProtos.MapMessage.newBuilder();
+        TextFormat.merge(text, b);
+        MapsProtos.MapMessage expected = b.build();
+        assertEquals(1, expected.getStringToMsgCount());
+        assertEquals(1, expected.getStringToEnumCount());
+
+        MapMessage lp = new MapMessage();
+        lp.parseFromTextFormat(text);
+        assertSameContent(expected, lp);
+    }
+
+    @Test
+    public void testTextFormatRepeatedMapKeyReplacesValue() throws Exception {
+        // The last entry for a key wins, also when it has no value
+        String text = "string_to_msg { key: \"k\" value { id: 1 name: \"a\" } }\n"
+                + "string_to_msg { key: \"k\" value { id: 2 } }\n"
+                + "string_to_msg { key: \"j\" value { id: 3 name: \"c\" } }\n"
+                + "string_to_msg { key: \"j\" }\n"
+                + "string_to_enum { key: \"e\" value: MAP_ENUM_ONE }\n"
+                + "string_to_enum { key: \"e\" }\n";
+
+        MapsProtos.MapMessage.Builder b = MapsProtos.MapMessage.newBuilder();
+        TextFormat.merge(text, b);
+        MapsProtos.MapMessage expected = b.build();
+        assertFalse(expected.getStringToMsgOrThrow("k").hasName());
+        assertFalse(expected.getStringToMsgOrThrow("j").hasId());
+        assertEquals(MapsProtos.MapEnumValue.MAP_ENUM_ZERO, expected.getStringToEnumOrThrow("e"));
+
+        MapMessage lp = new MapMessage();
+        lp.parseFromTextFormat(text);
+        assertSameContent(expected, lp);
+    }
+
     // --- Entries with an omitted key or value ---
     // A map entry is encoded as `message Entry { K key = 1; V value = 2; }`, so a key or
     // value missing from the wire reads as its default. protobuf-java always writes both,

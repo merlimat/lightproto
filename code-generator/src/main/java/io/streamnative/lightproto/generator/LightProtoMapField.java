@@ -767,7 +767,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             } else if (isBytesValue()) {
                 w.format("                  byte[] _val = new byte[0];\n");
             } else if (isEnumValue()) {
-                w.format("                  %s _val = null;\n", valueField.getJavaType());
+                w.format("                  %s _val = %s.valueOf(0);\n", valueField.getJavaType(), valueField.getJavaType());
             } else if (valueField.getProtoType().equals("bool")) {
                 w.format("                  boolean _val = false;\n");
             } else if (valueField.getProtoType().equals("float")) {
@@ -834,10 +834,11 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         w.format("                  _r.expect(_entryClose);\n");
 
         if (isMessageValue()) {
-            w.format("                  if (_msg != null) { %s(_key).copyFrom(_msg); }\n",
-                    Util.camelCase("put", ccName));
-        } else if (isEnumValue()) {
-            w.format("                  if (_val != null) { %s(_key, _val); }\n", Util.camelCase("put", ccName));
+            // An entry without a value still puts its key. put() returns the current value of
+            // a key already in the map, which this entry replaces: clear it before copying.
+            w.format("                  { %s _v = %s(_key);\n", valueField.getJavaType(), Util.camelCase("put", ccName));
+            w.format("                    _v.clear();\n");
+            w.format("                    if (_msg != null) { _v.copyFrom(_msg); } }\n");
         } else {
             w.format("                  %s(_key, _val);\n", Util.camelCase("put", ccName));
         }
