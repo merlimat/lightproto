@@ -137,31 +137,42 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         w.format("}\n");
 
         // get(key) - returns value, throws if not found
-        w.format("/** Returns the value for the given key in the {@code %s} map. */\n", field.getName());
-        generateGet(w, Util.camelCase("get", ccName), false);
+        String valueReturnType = isBytesValue() ? "byte[]" : valueField.getJavaType();
+        if (isBytesValue()) {
+            String put = Util.camelCase("put", ccName);
+            w.format("/**\n");
+            w.format(" * Returns the value for the given key in the {@code %s} map.\n", field.getName());
+            w.format(" * <p>When the value wraps a whole byte array, as after {@link #materialize()} or\n");
+            w.format(" * {@link #%s}, that array is returned without copying: it is shared with this message,\n", put);
+            w.format(" * and after {@code %s} it is the array that was passed in. Otherwise the value is\n", put);
+            w.format(" * copied into a new array.\n");
+            w.format(" */\n");
+        } else {
+            w.format("/** Returns the value for the given key in the {@code %s} map. */\n", field.getName());
+        }
+        w.format("public %s %s(%s key) {\n", valueReturnType, Util.camelCase("get", ccName), keyField.getJavaType());
+        w.format("    int _idx = _find%sKeyIndex(key);\n", Util.camelCaseFirstUpper(ccName));
+        w.format("    if (_idx < 0) {\n");
+        w.format("        throw new IllegalArgumentException(\"Key not found in map field '%s'\");\n", field.getName());
+        w.format("    }\n");
+        generateReturnValueAt(w, "_idx");
+        w.format("}\n");
 
         // forEach(BiConsumer)
-        w.format("/** Iterates over all entries in the {@code %s} map. */\n", field.getName());
-        generateForEach(w, Util.camelCase("forEach", ccName), false);
-
         if (isBytesValue()) {
-            // getArray(key) and forEachArray(BiConsumer) - skip the copy for whole-array values
-            String put = Util.camelCase("put", ccName);
-            String getArray = Util.camelCase("get", ccName, "array");
-            w.format("/**\n");
-            w.format(" * Returns the value for the given key in the {@code %s} map, avoiding a copy when possible.\n", field.getName());
-            w.format(" * <p>When the value wraps a whole byte array, as after {@link #materialize()} or\n");
-            w.format(" * {@link #%s}, that array is returned without copying. It stays shared with this\n", put);
-            w.format(" * message and must not be modified; after {@code %s} it is the array that was passed\n", put);
-            w.format(" * in. Otherwise this returns a new copy, like {@link #%s}.\n", Util.camelCase("get", ccName));
-            w.format(" */\n");
-            generateGet(w, getArray, true);
-            w.format("/**\n");
-            w.format(" * Iterates over all entries in the {@code %s} map, passing each value as\n", field.getName());
-            w.format(" * {@link #%s} returns it: without copying when it wraps a whole byte array.\n", getArray);
-            w.format(" */\n");
-            generateForEach(w, Util.camelCase("forEach", ccName, "array"), true);
+            w.format("/** Iterates over all entries in the {@code %s} map, passing each value as {@link #%s} returns it. */\n",
+                    field.getName(), Util.camelCase("get", ccName));
+        } else {
+            w.format("/** Iterates over all entries in the {@code %s} map. */\n", field.getName());
         }
+        w.format("public void %s(java.util.function.BiConsumer<%s, %s> consumer) {\n",
+                Util.camelCase("forEach", ccName), keyBoxed(), valueBoxed());
+        w.format("    for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
+        generateResolveKeyExpr(w, "_i", "_k");
+        generateResolveValueExpr(w, "_i", "_v");
+        w.format("        consumer.accept(_k, _v);\n");
+        w.format("    }\n");
+        w.format("}\n");
 
         // Private: _findKeyIndex
         generateFindKeyIndex(w);
@@ -170,29 +181,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         generateEnsureCapacity(w);
     }
 
-    private void generateGet(PrintWriter w, String methodName, boolean wholeArray) {
-        String valueReturnType = isBytesValue() ? "byte[]" : valueField.getJavaType();
-        w.format("public %s %s(%s key) {\n", valueReturnType, methodName, keyField.getJavaType());
-        w.format("    int _idx = _find%sKeyIndex(key);\n", Util.camelCaseFirstUpper(ccName));
-        w.format("    if (_idx < 0) {\n");
-        w.format("        throw new IllegalArgumentException(\"Key not found in map field '%s'\");\n", field.getName());
-        w.format("    }\n");
-        generateReturnValueAt(w, "_idx", wholeArray);
-        w.format("}\n");
-    }
-
-    private void generateForEach(PrintWriter w, String methodName, boolean wholeArray) {
-        w.format("public void %s(java.util.function.BiConsumer<%s, %s> consumer) {\n",
-                methodName, keyBoxed(), valueBoxed());
-        w.format("    for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
-        generateResolveKeyExpr(w, "_i", "_k");
-        generateResolveValueExpr(w, "_i", "_v", wholeArray);
-        w.format("        consumer.accept(_k, _v);\n");
-        w.format("    }\n");
-        w.format("}\n");
-    }
-
-    private void generateReturnValueAt(PrintWriter w, String idxVar, boolean wholeArray) {
+    private void generateReturnValueAt(PrintWriter w, String idxVar) {
         if (isStringValue()) {
             w.format("    LightProtoCodec.StringHolder _sh = _%sValues[%s];\n", ccName, idxVar);
             w.format("    if (_sh.s == null) {\n");
@@ -201,11 +190,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    return _sh.s;\n");
         } else if (isBytesValue()) {
             w.format("    LightProtoCodec.BytesHolder _bh = _%sValues[%s];\n", ccName, idxVar);
-            if (wholeArray) {
-                w.format("    if (LightProtoCodec.isWholeArray(_bh.b, _bh.len)) {\n");
-                w.format("        return _bh.b.array();\n");
-                w.format("    }\n");
-            }
+            w.format("    if (LightProtoCodec.isWholeArray(_bh.b, _bh.len)) {\n");
+            w.format("        return _bh.b.array();\n");
+            w.format("    }\n");
             w.format("    if (_bh.idx == -1) {\n");
             w.format("        byte[] _res = new byte[_bh.len];\n");
             w.format("        _bh.b.getBytes(_bh.b.readerIndex(), _res);\n");
@@ -232,7 +219,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         }
     }
 
-    private void generateResolveValueExpr(PrintWriter w, String idxExpr, String varName, boolean wholeArray) {
+    private void generateResolveValueExpr(PrintWriter w, String idxExpr, String varName) {
         if (isStringValue()) {
             w.format("        LightProtoCodec.StringHolder _vsh = _%sValues[%s];\n", ccName, idxExpr);
             w.format("        if (_vsh.s == null) {\n");
@@ -242,13 +229,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         } else if (isBytesValue()) {
             w.format("        LightProtoCodec.BytesHolder _vbh = _%sValues[%s];\n", ccName, idxExpr);
             w.format("        byte[] %s;\n", varName);
-            if (wholeArray) {
-                w.format("        if (LightProtoCodec.isWholeArray(_vbh.b, _vbh.len)) {\n");
-                w.format("            %s = _vbh.b.array();\n", varName);
-                w.format("        } else if (_vbh.idx == -1) {\n");
-            } else {
-                w.format("        if (_vbh.idx == -1) {\n");
-            }
+            w.format("        if (LightProtoCodec.isWholeArray(_vbh.b, _vbh.len)) {\n");
+            w.format("            %s = _vbh.b.array();\n", varName);
+            w.format("        } else if (_vbh.idx == -1) {\n");
             w.format("            %s = new byte[_vbh.len];\n", varName);
             w.format("            _vbh.b.getBytes(_vbh.b.readerIndex(), %s);\n", varName);
             w.format("        } else {\n");
