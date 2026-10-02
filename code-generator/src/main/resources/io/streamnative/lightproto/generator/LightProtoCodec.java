@@ -580,9 +580,8 @@ class LightProtoCodec {
                     MH_COPY_MEMORY.invokeExact((Object) null, b.memoryAddress() + index,
                             (Object) value, BYTE_ARRAY_BASE_OFFSET, (long) len);
                 } else if (b.hasArray()) {
-                    MH_COPY_MEMORY.invokeExact((Object) b.array(),
-                            BYTE_ARRAY_BASE_OFFSET + b.arrayOffset() + index,
-                            (Object) value, BYTE_ARRAY_BASE_OFFSET, (long) len);
+                    // Not Unsafe.copyMemory: since JDK 24 it pays a check on every call
+                    System.arraycopy(b.array(), b.arrayOffset() + index, value, 0, len);
                 } else {
                     b.getBytes(index, value, 0, len);
                 }

@@ -200,6 +200,19 @@ public class LightProtoCodecTest {
         assertEquals(CodedOutputStream.computeStringSizeNoTag(s), LightProtoCodec.computeVarIntSize(sb.length) + LightProtoCodec.computeStringUTF8Size(s));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"hello", "UTF16 Ελληνικά Русский 日本語"})
+    public void testStringFromArrayOffset(String s) {
+        // A heap buffer that starts inside its array: indexes are relative to arrayOffset()
+        byte[] sb = s.getBytes(StandardCharsets.UTF_8);
+        byte[] array = new byte[sb.length + 10];
+        System.arraycopy(sb, 0, array, 7, sb.length);
+        ByteBuf slice = Unpooled.wrappedBuffer(array).slice(5, sb.length + 5);
+        assertEquals(5, slice.arrayOffset());
+
+        assertEquals(s, LightProtoCodec.readString(slice, 2, sb.length));
+    }
+
     @Test
     public void testScratchFor() {
         // A fitting array is returned as-is
