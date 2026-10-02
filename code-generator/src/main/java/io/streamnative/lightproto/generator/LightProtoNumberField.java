@@ -80,8 +80,6 @@ public class LightProtoNumberField extends LightProtoField {
     static String parseNumber(ProtoFieldDescriptor field) {
         if (field.isEnumField()) {
             return String.format("%s.valueOf(LightProtoCodec.readVarInt(_buffer))", field.getJavaType());
-        } else if (field.getProtoType().equals("bool")) {
-            return "LightProtoCodec.readVarInt(_buffer) == 1";
         } else if (field.getProtoType().equals("int32")) {
             return "LightProtoCodec.readVarInt(_buffer)";
         } else if (field.getProtoType().equals("uint32")) {
@@ -109,6 +107,27 @@ public class LightProtoNumberField extends LightProtoField {
         } else {
             throw new IllegalArgumentException("Failed to write parser for field: " + field.getProtoType());
         }
+    }
+
+    /**
+     * Emits code that reads a value of the field's type and passes it to {@code target}, a
+     * format with one {@code %s} for the value (e.g. {@code "x = %s;"}). {@code varint} names
+     * the local that holds a bool's raw value.
+     *
+     * <p>A bool is read as protobuf reads it: a 64-bit varint, true when not zero. A value
+     * other than 0 and 1 re-encodes as a different varint (a multi-byte one as one byte), so,
+     * as for an unknown field, parseFrom() must not cache the wire size as the serialized size.
+     */
+    static void parseNumberInto(PrintWriter w, ProtoFieldDescriptor field, String varint, String target) {
+        if (!field.isBoolField()) {
+            w.format(target + "\n", parseNumber(field));
+            return;
+        }
+        w.format("long %s = LightProtoCodec.readVarInt64(_buffer);\n", varint);
+        w.format("if ((%s & ~1L) != 0) {\n", varint);
+        w.format("    _hasUnknownFields = true;\n");
+        w.format("}\n");
+        w.format(target + "\n", varint + " != 0");
     }
 
     static String serializedSizeOfNumber(ProtoFieldDescriptor field, String name) {
@@ -181,7 +200,7 @@ public class LightProtoNumberField extends LightProtoField {
 
     @Override
     public void parse(PrintWriter w) {
-        w.format("%s = %s;\n", ccName, parseNumber(field));
+        parseNumberInto(w, field, "_" + ccName, ccName + " = %s;");
     }
 
     @Override
