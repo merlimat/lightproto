@@ -23,3 +23,8 @@ message MapMessage {
     map<string, MapEnumValue> string_to_enum = 7;
     optional string name = 10;
 }
+
+message MapMessageHolder {
+    optional MapMessage inner = 1;
+    map<string, MapMessage> nested_maps = 2;
+}

@@ -16,6 +16,7 @@
 package io.streamnative.lightproto.tests;
 
 import com.google.protobuf.CodedOutputStream;
+import com.google.protobuf.UnknownFieldSet;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.BeforeEach;
@@ -179,5 +180,31 @@ public class EnumsTest {
                 .build();
         assertEquals(pbet1.getSerializedSize(), parsed.getSerializedSize());
         assertArrayEquals(pbet1.toByteArray(), parsed.toByteArray());
+    }
+
+    @Test
+    public void testUnknownEnumInNestedMessage() throws Exception {
+        // person { phone { number: "1" type: 99 } }: 99 is not a PhoneType, so the phone
+        // drops it, and the person and address book above it must not cache their wire size
+        AddressBookProtos.Person.PhoneNumber phone = AddressBookProtos.Person.PhoneNumber.newBuilder()
+                .setNumber("1")
+                .build();
+        UnknownFieldSet type99 = UnknownFieldSet.newBuilder()
+                .addField(2, UnknownFieldSet.Field.newBuilder().addVarint(99).build())
+                .build();
+        byte[] wire = addressBook(phone.toBuilder().setUnknownFields(type99).build()).toByteArray();
+        byte[] expected = addressBook(phone).toByteArray();
+
+        AddressBook parsed = new AddressBook();
+        parsed.parseFrom(wire);
+        assertFalse(parsed.getPersonAt(0).getPhoneAt(0).hasType());
+        assertEquals(expected.length, parsed.getSerializedSize());
+        assertArrayEquals(expected, parsed.toByteArray());
+    }
+
+    private static AddressBookProtos.AddressBook addressBook(AddressBookProtos.Person.PhoneNumber phone) {
+        return AddressBookProtos.AddressBook.newBuilder()
+                .addPerson(AddressBookProtos.Person.newBuilder().setName("n").setId(1).addPhone(phone))
+                .build();
     }
 }

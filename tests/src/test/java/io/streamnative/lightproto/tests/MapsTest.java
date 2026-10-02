@@ -597,6 +597,23 @@ public class MapsTest {
         verifySameAsProtobuf(wire);
     }
 
+    // A message holding such an entry serializes larger than its parsed size, and so
+    // does every message it is nested in: none of them may cache the parsed size.
+
+    @Test
+    public void testOmittedValueInNestedMessage() throws Exception {
+        // inner { int_to_string entry {key: 7} }
+        byte[] wire = {0x0A, 0x04, 0x12, 0x02, 0x08, 0x07};
+        verifyHolderSameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testOmittedValueInMapMessageValue() throws Exception {
+        // nested_maps entry {key: "a", value: {int_to_string entry {key: 7}}}
+        byte[] wire = {0x12, 0x09, 0x0A, 0x01, 'a', 0x12, 0x04, 0x12, 0x02, 0x08, 0x07};
+        verifyHolderSameAsProtobuf(wire);
+    }
+
     // --- Helpers ---
 
     private byte[] serialize(MapMessage msg) {
@@ -644,6 +661,15 @@ public class MapsTest {
         MapMessage lp = new MapMessage();
         lp.parseFrom(wire);
         return lp;
+    }
+
+    /** Parses {@code wire} into a MapMessageHolder and checks it serializes like protobuf-java. */
+    private static void verifyHolderSameAsProtobuf(byte[] wire) throws Exception {
+        byte[] expected = MapsProtos.MapMessageHolder.parseFrom(wire).toByteArray();
+        MapMessageHolder lp = new MapMessageHolder();
+        lp.parseFrom(wire);
+        assertEquals(expected.length, lp.getSerializedSize());
+        assertArrayEquals(expected, lp.toByteArray());
     }
 
     /**

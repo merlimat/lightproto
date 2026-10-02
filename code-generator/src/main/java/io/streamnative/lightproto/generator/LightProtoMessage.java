@@ -188,10 +188,26 @@ public class LightProtoMessage {
         if (hasRequiredFields()) {
             w.format("            checkRequiredFields();\n");
         }
+        // The wire size is the serialized size only if re-serializing reproduces the
+        // wire. Besides unknown fields skipped here, _hasUnknownFields is set by enum
+        // parsers that drop an unknown value, by map entries with unknown fields or an
+        // omitted key or value, and after parsing a nested message whose
+        // _isSizeCached() is false. Only message and map field parsers emit that last
+        // check, so messages without such fields keep their parseFrom() unchanged.
         w.format("            if (!_hasUnknownFields) {\n");
         w.format("                _cachedSize = _size;\n");
         w.format("            }\n");
         w.format("            _parsedBuffer = _buffer;\n");
+        w.format("        }\n");
+
+        w.println("        /**");
+        w.println("         * Internal: whether the serialized size is cached. Right after parseFrom(),");
+        w.println("         * false means the wire size is not the serialized size, because of this");
+        w.println("         * message or one nested in it (e.g. dropped unknown fields). Public only so");
+        w.println("         * that generated messages in other packages can check nested fields of this type.");
+        w.println("         */");
+        w.format("        public boolean _isSizeCached() {\n");
+        w.format("            return _cachedSize > -1;\n");
         w.format("        }\n");
     }
 
