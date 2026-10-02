@@ -72,9 +72,17 @@ public class LightProtoBytesField extends LightProtoField {
         w.format("    return _%sLen;\n", ccName);
         w.format("}\n");
 
-        w.format("/** Returns the {@code %s} field as a byte array. */\n", field.getName());
+        String setter = Util.camelCase("set", ccName);
+        w.format("/**\n");
+        w.format(" * Returns the {@code %s} field as a byte array.\n", field.getName());
+        w.format(" * <p>When the field wraps a whole byte array, as after {@link #materialize()} or\n");
+        w.format(" * {@link #%s(byte[])}, that array is returned without copying: it is shared with this\n", setter);
+        w.format(" * message, and after {@code %s(byte[])} it is the array that was passed in. Otherwise\n", setter);
+        w.format(" * the value is copied into a new array.\n");
+        w.format(" */\n");
         w.format("public byte[] %s() {\n", Util.camelCase("get", ccName));
         w.format("    if (!(%s)) { return new byte[0]; }\n", presenceCondition());
+        w.format("    if (LightProtoCodec.isWholeArray(%s, _%sLen)) { return %s.array(); }\n", ccName, ccName, ccName);
         w.format("    io.netty.buffer.ByteBuf _b = %s();\n", Util.camelCase("get", ccName, "slice"));
         w.format("    byte[] res = new byte[_b.readableBytes()];\n");
         w.format("    _b.getBytes(0, res);\n");

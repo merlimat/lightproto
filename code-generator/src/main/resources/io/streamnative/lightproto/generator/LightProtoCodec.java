@@ -18,6 +18,7 @@ package io.streamnative.lightproto.generator;
 import io.netty.buffer.AbstractByteBuf;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.UnpooledHeapByteBuf;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -729,6 +730,18 @@ class LightProtoCodec {
         ByteBuf b;
         int idx;
         int len;
+    }
+
+    /**
+     * Whether {@code b} wraps a whole array that is exactly the {@code len}-byte value at its
+     * reader index, so that the array can be returned in place of a copy. Only plain
+     * {@link UnpooledHeapByteBuf} instances qualify, as created by
+     * {@code Unpooled.wrappedBuffer(byte[])}: pooled buffers share and recycle their arrays,
+     * and subclasses can recycle theirs by overriding {@code freeArray()}.
+     */
+    static boolean isWholeArray(ByteBuf b, int len) {
+        return b != null && b.getClass() == UnpooledHeapByteBuf.class
+                && b.readerIndex() == 0 && b.array().length == len;
     }
 
     // ==================== JSON serialization helpers ====================

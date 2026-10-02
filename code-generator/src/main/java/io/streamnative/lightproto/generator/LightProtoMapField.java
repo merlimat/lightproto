@@ -138,7 +138,18 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
 
         // get(key) - returns value, throws if not found
         String valueReturnType = isBytesValue() ? "byte[]" : valueField.getJavaType();
-        w.format("/** Returns the value for the given key in the {@code %s} map. */\n", field.getName());
+        if (isBytesValue()) {
+            String put = Util.camelCase("put", ccName);
+            w.format("/**\n");
+            w.format(" * Returns the value for the given key in the {@code %s} map.\n", field.getName());
+            w.format(" * <p>When the value wraps a whole byte array, as after {@link #materialize()} or\n");
+            w.format(" * {@link #%s}, that array is returned without copying: it is shared with this message,\n", put);
+            w.format(" * and after {@code %s} it is the array that was passed in. Otherwise the value is\n", put);
+            w.format(" * copied into a new array.\n");
+            w.format(" */\n");
+        } else {
+            w.format("/** Returns the value for the given key in the {@code %s} map. */\n", field.getName());
+        }
         w.format("public %s %s(%s key) {\n", valueReturnType, Util.camelCase("get", ccName), keyField.getJavaType());
         w.format("    int _idx = _find%sKeyIndex(key);\n", Util.camelCaseFirstUpper(ccName));
         w.format("    if (_idx < 0) {\n");
@@ -148,7 +159,12 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         w.format("}\n");
 
         // forEach(BiConsumer)
-        w.format("/** Iterates over all entries in the {@code %s} map. */\n", field.getName());
+        if (isBytesValue()) {
+            w.format("/** Iterates over all entries in the {@code %s} map, passing each value as {@link #%s} returns it. */\n",
+                    field.getName(), Util.camelCase("get", ccName));
+        } else {
+            w.format("/** Iterates over all entries in the {@code %s} map. */\n", field.getName());
+        }
         w.format("public void %s(java.util.function.BiConsumer<%s, %s> consumer) {\n",
                 Util.camelCase("forEach", ccName), keyBoxed(), valueBoxed());
         w.format("    for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
@@ -174,6 +190,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    return _sh.s;\n");
         } else if (isBytesValue()) {
             w.format("    LightProtoCodec.BytesHolder _bh = _%sValues[%s];\n", ccName, idxVar);
+            w.format("    if (LightProtoCodec.isWholeArray(_bh.b, _bh.len)) {\n");
+            w.format("        return _bh.b.array();\n");
+            w.format("    }\n");
             w.format("    if (_bh.idx == -1) {\n");
             w.format("        byte[] _res = new byte[_bh.len];\n");
             w.format("        _bh.b.getBytes(_bh.b.readerIndex(), _res);\n");
@@ -210,7 +229,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         } else if (isBytesValue()) {
             w.format("        LightProtoCodec.BytesHolder _vbh = _%sValues[%s];\n", ccName, idxExpr);
             w.format("        byte[] %s;\n", varName);
-            w.format("        if (_vbh.idx == -1) {\n");
+            w.format("        if (LightProtoCodec.isWholeArray(_vbh.b, _vbh.len)) {\n");
+            w.format("            %s = _vbh.b.array();\n", varName);
+            w.format("        } else if (_vbh.idx == -1) {\n");
             w.format("            %s = new byte[_vbh.len];\n", varName);
             w.format("            _vbh.b.getBytes(_vbh.b.readerIndex(), %s);\n", varName);
             w.format("        } else {\n");

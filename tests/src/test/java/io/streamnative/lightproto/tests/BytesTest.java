@@ -18,11 +18,14 @@ package io.streamnative.lightproto.tests;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.CodedOutputStream;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -239,5 +242,143 @@ public class BytesTest {
         assertEquals(4, parsed.getExtraItemSizeAt(1));
         assertArrayEquals(new byte[]{1, 2, 3}, parsed.getExtraItemAt(0));
         assertArrayEquals(new byte[]{4, 5, 6, 7}, parsed.getExtraItemAt(1));
+    }
+
+    @Test
+    public void testGettersShareMaterializedArrays() throws Exception {
+        B lpb = new B().setPayload(new byte[]{1, 2, 3});
+        lpb.addExtraItem(new byte[]{4, 5});
+        lpb.writeTo(bb1);
+
+        B parsed = new B();
+        parsed.parseFrom(bb1, bb1.readableBytes());
+        parsed.materialize();
+
+        // materialize() copied each value into an exact-size array: the getters return that
+        // array as is, and it is the one backing the field
+        byte[] payload = parsed.getPayload();
+        assertArrayEquals(new byte[]{1, 2, 3}, payload);
+        assertSame(payload, parsed.getPayload());
+        assertSame(payload, parsed.getPayloadSlice().array());
+
+        byte[] item = parsed.getExtraItemAt(0);
+        assertArrayEquals(new byte[]{4, 5}, item);
+        assertSame(item, parsed.getExtraItemAt(0));
+        assertSame(item, parsed.getExtraItemSliceAt(0).array());
+
+        // The arrays do not depend on the buffer the message was parsed from
+        Arrays.fill(b1, (byte) 0);
+        assertArrayEquals(new byte[]{1, 2, 3}, payload);
+        assertArrayEquals(new byte[]{4, 5}, item);
+    }
+
+    @Test
+    public void testGettersReturnArraysPassedToSetters() {
+        byte[] payload = {1, 2, 3};
+        byte[] item = {4, 5};
+        B lpb = new B().setPayload(payload);
+        lpb.addExtraItem(item);
+
+        assertSame(payload, lpb.getPayload());
+        assertSame(item, lpb.getExtraItemAt(0));
+
+        // Same for a ByteBuf that wraps exactly the caller's array
+        byte[] wrapped = {6, 7};
+        lpb.setPayload(Unpooled.wrappedBuffer(wrapped));
+        assertSame(wrapped, lpb.getPayload());
+    }
+
+    @Test
+    public void testGettersCopySlicesOfParsedBuffer() throws Exception {
+        B lpb = new B().setPayload(new byte[]{1, 2, 3});
+        lpb.addExtraItem(new byte[]{4, 5});
+        lpb.writeTo(bb1);
+
+        // Without materialize(), the values are slices of the larger parsed buffer
+        B parsed = new B();
+        parsed.parseFrom(bb1, bb1.readableBytes());
+
+        byte[] payload = parsed.getPayload();
+        assertArrayEquals(new byte[]{1, 2, 3}, payload);
+        assertNotSame(payload, parsed.getPayload());
+        payload[0] = 9;
+        assertArrayEquals(new byte[]{1, 2, 3}, parsed.getPayload());
+
+        byte[] item = parsed.getExtraItemAt(0);
+        assertArrayEquals(new byte[]{4, 5}, item);
+        assertNotSame(item, parsed.getExtraItemAt(0));
+        item[0] = 9;
+        assertArrayEquals(new byte[]{4, 5}, parsed.getExtraItemAt(0));
+    }
+
+    @Test
+    public void testGettersCopyBuffersNotWrappingExactlyTheValue() {
+        assertPayloadCopied(Unpooled.wrappedBuffer(new byte[]{0, 1, 2, 3, 0}, 1, 3));
+        assertPayloadCopied(Unpooled.wrappedBuffer(new byte[]{0, 1, 2, 3}).skipBytes(1));
+        assertPayloadCopied(Unpooled.wrappedBuffer(new byte[]{1, 2, 3, 0}).writerIndex(3));
+
+        ByteBuf pooled = PooledByteBufAllocator.DEFAULT.heapBuffer(3).writeBytes(new byte[]{1, 2, 3});
+        try {
+            assertPayloadCopied(pooled);
+        } finally {
+            pooled.release();
+        }
+
+        ByteBuf direct = Unpooled.directBuffer(3).writeBytes(new byte[]{1, 2, 3});
+        try {
+            assertPayloadCopied(direct);
+        } finally {
+            direct.release();
+        }
+    }
+
+    private static void assertPayloadCopied(ByteBuf value) {
+        B lpb = new B().setPayload(value);
+        byte[] payload = lpb.getPayload();
+        assertArrayEquals(new byte[]{1, 2, 3}, payload);
+        assertNotSame(payload, lpb.getPayload());
+    }
+
+    @Test
+    public void testRepeatedGetterAfterClear() {
+        B lpb = new B();
+        lpb.addExtraItem(new byte[]{4, 5});
+        lpb.clear();
+
+        // clear() keeps the element holders for reuse: their arrays must not be returned
+        assertThrows(IndexOutOfBoundsException.class, () -> lpb.getExtraItemAt(0));
+    }
+
+    @Test
+    public void testMapGettersShareWholeArrays() throws Exception {
+        byte[] a = {1, 2, 3};
+        MapMessage lp = new MapMessage();
+        lp.putStringToBytes("a", a);
+        lp.putStringToBytes("b", new byte[]{4, 5});
+        assertSame(a, lp.getStringToBytes("a"));
+
+        lp.writeTo(bb1);
+        MapMessage parsed = new MapMessage();
+        parsed.parseFrom(bb1, bb1.readableBytes());
+
+        // Values that are still slices of the parsed buffer are copied
+        byte[] copied = parsed.getStringToBytes("a");
+        assertArrayEquals(a, copied);
+        assertNotSame(copied, parsed.getStringToBytes("a"));
+        Map<String, byte[]> copies = new HashMap<>();
+        parsed.forEachStringToBytes(copies::put);
+        assertNotSame(copies.get("a"), parsed.getStringToBytes("a"));
+
+        parsed.materialize();
+        byte[] shared = parsed.getStringToBytes("a");
+        assertArrayEquals(a, shared);
+        assertSame(shared, parsed.getStringToBytes("a"));
+
+        Map<String, byte[]> values = new HashMap<>();
+        parsed.forEachStringToBytes(values::put);
+        assertEquals(2, values.size());
+        assertSame(shared, values.get("a"));
+        assertArrayEquals(new byte[]{4, 5}, values.get("b"));
+        assertSame(values.get("b"), parsed.getStringToBytes("b"));
     }
 }
