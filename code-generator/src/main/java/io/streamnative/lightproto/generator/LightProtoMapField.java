@@ -871,7 +871,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
 
         // Value size: 1 (tag) + data size
         w.format("    _entrySize += 1;\n"); // value tag is always 1 byte
-        generateValueDataSize(w, "_entryIdx");
+        generateValueDataSize(w, "_entryIdx", "_sizeForWrite");
 
         // Write outer tag + entry size
         w.format("    %s;\n", writeTagExpr(tagName(), sink));
@@ -898,7 +898,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         }
     }
 
-    private void generateValueDataSize(PrintWriter w, String idxVar) {
+    // sizeMethod: getSerializedSize when computing the size, _sizeForWrite when writing
+    private void generateValueDataSize(PrintWriter w, String idxVar, String sizeMethod) {
         if (isStringValue()) {
             w.format("    _entrySize += LightProtoCodec.computeVarIntSize(_%sValues[%s].len) + _%sValues[%s].len;\n",
                     ccName, idxVar, ccName, idxVar);
@@ -906,7 +907,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    _entrySize += LightProtoCodec.computeVarIntSize(_%sValues[%s].len) + _%sValues[%s].len;\n",
                     ccName, idxVar, ccName, idxVar);
         } else if (isMessageValue()) {
-            w.format("    int _msgSize_%s = _%sValues[%s].getSerializedSize();\n", idxVar, ccName, idxVar);
+            w.format("    int _msgSize_%s = _%sValues[%s].%s();\n", idxVar, ccName, idxVar, sizeMethod);
             w.format("    _entrySize += LightProtoCodec.computeVarIntSize(_msgSize_%s) + _msgSize_%s;\n", idxVar, idxVar);
         } else {
             w.format("    _entrySize += %s;\n",
@@ -946,7 +947,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             sink.copyBytes(w, "_parsedBuffer", "_vbh.idx", "_vbh.len");
             w.format("    }\n");
         } else if (isMessageValue()) {
-            w.format("    _i = LightProtoCodec.writeRawVarInt(%s, _i, _%sValues[%s].getSerializedSize());\n",
+            w.format("    _i = LightProtoCodec.writeRawVarInt(%s, _i, _%sValues[%s]._sizeForWrite());\n",
                     sink.var, ccName, idxVar);
             w.format("    _i = _%sValues[%s]._writeTo(%s, _i);\n", ccName, idxVar, sink.var);
         } else {
@@ -965,7 +966,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
 
         // Value: 1 (tag) + data size
         w.format("    _entrySize += 1;\n");
-        generateValueDataSize(w, "_i");
+        generateValueDataSize(w, "_i", "getSerializedSize");
 
         w.format("    _size += %s_SIZE + LightProtoCodec.computeVarIntSize(_entrySize) + _entrySize;\n", tagName());
         w.format("}\n");

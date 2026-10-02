@@ -104,7 +104,7 @@ public class LightProtoMessageField extends LightProtoField {
         // Nested messages write into the same sink: no per-child ensureWritable,
         // buffer-address resolution or writerIndex round-trips.
         w.format("%s;\n", writeTagExpr(tagName(), sink));
-        w.format("_i = LightProtoCodec.writeRawVarInt(%s, _i, %s.getSerializedSize());\n", sink.var, ccName);
+        w.format("_i = LightProtoCodec.writeRawVarInt(%s, _i, %s._sizeForWrite());\n", sink.var, ccName);
         w.format("_i = %s._writeTo(%s, _i);\n", ccName, sink.var);
     }
 
