@@ -74,11 +74,12 @@ public class SegmentedByteBufTest {
     @Test
     void testVarInt64AcrossSegments() {
         long[] values = {0, 1, 300, 1L << 40, Long.MAX_VALUE, Long.MIN_VALUE, -1};
-        ByteBuf encoded = Unpooled.buffer();
+        byte[] bytes = new byte[values.length * 10];
+        int length = 0;
         for (long value : values) {
-            LightProtoCodec.writeVarInt64(encoded, value);
+            length = LightProtoCodec.writeRawVarInt64(bytes, length, value);
         }
-        byte[] bytes = ByteBufUtil.getBytes(encoded);
+        bytes = Arrays.copyOf(bytes, length);
         for (int cut = 1; cut < bytes.length; cut++) {
             ByteBuf buf = wrap(split(bytes, cut));
             for (long value : values) {
