@@ -485,4 +485,22 @@ public class RepeatedNumbersTest {
         assertEquals(-12L, parsed.getXSint64At(0));
         assertEquals(-13L, parsed.getXSint64At(1));
     }
+
+    @Test
+    public void testSint32WithZigZagTopBitSet() throws Exception {
+        // The zigzag encoding of these values is >= 2^31 unsigned: still a 5-byte varint
+        int[] values = {1 << 30, -(1 << 30) - 1, Integer.MAX_VALUE, Integer.MIN_VALUE};
+        Repeated lp = new Repeated();
+        RepeatedPacked lpPacked = new RepeatedPacked();
+        RepeatedNumbers.Repeated.Builder pb = RepeatedNumbers.Repeated.newBuilder();
+        RepeatedNumbers.RepeatedPacked.Builder pbPacked = RepeatedNumbers.RepeatedPacked.newBuilder();
+        for (int value : values) {
+            lp.addXSint32(value);
+            lpPacked.addXSint32(value);
+            pb.addXSint32(value);
+            pbPacked.addXSint32(value);
+        }
+        assertArrayEquals(pb.build().toByteArray(), lp.toByteArray());
+        assertArrayEquals(pbPacked.build().toByteArray(), lpPacked.toByteArray());
+    }
 }
