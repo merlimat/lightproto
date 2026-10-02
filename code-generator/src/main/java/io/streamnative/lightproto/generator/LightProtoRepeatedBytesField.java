@@ -68,6 +68,27 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("    return res;\n");
         w.format("}\n");
 
+        String adder = Util.camelCase("add", singularName);
+        w.format("/**\n");
+        w.format(" * Returns the element at the given index in the {@code %s} list as a byte array, avoiding\n", field.getName());
+        w.format(" * a copy when possible.\n");
+        w.format(" * <p>When the element wraps a whole byte array, as after {@link #materialize()} or\n");
+        w.format(" * {@link #%s(byte[])}, that array is returned without copying. It stays shared with\n", adder);
+        w.format(" * this message and must not be modified; after {@code %s(byte[])} it is the array\n", adder);
+        w.format(" * that was passed in. Otherwise this returns a new copy, like {@link #%s(int)}.\n",
+                Util.camelCase("get", singularName, "at"));
+        w.format(" */\n");
+        w.format("public byte[] %s(int idx) {\n", Util.camelCase("get", singularName, "array", "at"));
+        w.format("    if (idx < 0 || idx >= _%sCount) {\n", pluralName);
+        w.format("        throw new IndexOutOfBoundsException(\"Index \" + idx + \" is out of the list size (\" + _%sCount + \") for field '%s'\");\n", pluralName, field.getName());
+        w.format("    }\n");
+        w.format("    LightProtoCodec.BytesHolder _bh = %s[idx];\n", pluralName);
+        w.format("    if (LightProtoCodec.isWholeArray(_bh.b, _bh.len)) {\n");
+        w.format("        return _bh.b.array();\n");
+        w.format("    }\n");
+        w.format("    return %s(idx);\n", Util.camelCase("get", singularName, "at"));
+        w.format("}\n");
+
         w.format("/** Returns the element at the given index in the {@code %s} list as a ByteBuf slice. */\n", field.getName());
         w.format("public io.netty.buffer.ByteBuf %s(int idx) {\n", Util.camelCase("get", singularName, "slice", "at"));
         w.format("    if (idx < 0 || idx >= _%sCount) {\n", pluralName);

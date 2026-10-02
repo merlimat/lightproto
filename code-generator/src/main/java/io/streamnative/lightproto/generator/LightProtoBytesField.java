@@ -81,6 +81,22 @@ public class LightProtoBytesField extends LightProtoField {
         w.format("    return res;\n");
         w.format("}\n");
 
+        String setter = Util.camelCase("set", ccName);
+        w.format("/**\n");
+        w.format(" * Returns the {@code %s} field as a byte array, avoiding a copy when possible.\n", field.getName());
+        w.format(" * <p>When the field wraps a whole byte array, as after {@link #materialize()} or\n");
+        w.format(" * {@link #%s(byte[])}, that array is returned without copying. It stays shared with\n", setter);
+        w.format(" * this message and must not be modified; after {@code %s(byte[])} it is the array\n", setter);
+        w.format(" * that was passed in. Otherwise this returns a new copy, like {@link #%s()}.\n",
+                Util.camelCase("get", ccName));
+        w.format(" */\n");
+        w.format("public byte[] %s() {\n", Util.camelCase("get", ccName, "array"));
+        w.format("    if ((%s) && LightProtoCodec.isWholeArray(%s, _%sLen)) {\n", presenceCondition(), ccName, ccName);
+        w.format("        return %s.array();\n", ccName);
+        w.format("    }\n");
+        w.format("    return %s();\n", Util.camelCase("get", ccName));
+        w.format("}\n");
+
         w.format("/** Returns the {@code %s} field as a ByteBuf slice. */\n", field.getName());
         w.format("public io.netty.buffer.ByteBuf %s() {\n", Util.camelCase("get", ccName, "slice"));
         w.format("    if (!(%s)) { return io.netty.buffer.Unpooled.EMPTY_BUFFER; }\n", presenceCondition());
