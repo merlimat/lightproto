@@ -22,6 +22,7 @@ message MapMessage {
     map<string, double> string_to_double = 6;
     map<string, MapEnumValue> string_to_enum = 7;
     optional string name = 10;
+    map<int64, string> long_to_string = 11;
 }
 
 message MapMessageHolder {

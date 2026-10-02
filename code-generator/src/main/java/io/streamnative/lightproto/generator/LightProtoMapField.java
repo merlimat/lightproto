@@ -109,6 +109,19 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         w.format("private %s _%sValues = null;\n", valueArrayType(), ccName);
         w.format("private int _%sCount = 0;\n", ccName);
         w.format("private java.util.HashMap<%s, Integer> _%sIndex = null;\n", keyBoxed(), ccName);
+        if (!keyField.isBoolField()) {
+            // For the duplicate key check while parsing: a hash table of entry indexes, whose
+            // slots carry the generation (one per parse) that entered them, so that a new parse
+            // starts without clearing it; the number of entries entered in this generation; and
+            // the hash of each string key
+            w.format("private long[] _%sKeyTable = null;\n", ccName);
+            w.format("private int _%sKeyTableShift = 0;\n", ccName);
+            w.format("private int _%sKeyGen = 0;\n", ccName);
+            w.format("private int _%sKeysEntered = 0;\n", ccName);
+            if (isStringKey()) {
+                w.format("private int[] _%sKeyHashes = null;\n", ccName);
+            }
+        }
     }
 
     @Override
@@ -176,6 +189,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
 
         // Private: _findKeyIndex
         generateFindKeyIndex(w);
+
+        // Private: _findParsedKeyIndex, _enterKey, _growKeyTable
+        generateFindParsedKeyIndex(w);
 
         // Private: _ensureCapacity
         generateEnsureCapacity(w);
@@ -280,6 +296,118 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         }
         w.format("    }\n");
         w.format("    return -1;\n");
+        w.format("}\n");
+    }
+
+    /**
+     * The duplicate key check of parse(): returns the index of the entry already parsed
+     * with the same key, or -1 after entering the key at the next index, where parse()
+     * appends it. Keys go in a hash table of entry indexes, which an instance keeps across
+     * parses: each parse starts a new generation instead of clearing it, and the table is
+     * only grown (4x at half load) past the largest map the instance has parsed. The first
+     * key is only entered with the second one, so that single-entry maps hash nothing.
+     */
+    private void generateFindParsedKeyIndex(PrintWriter w) {
+        if (keyField.isBoolField()) {
+            return; // parse() uses _findKeyIndex(): a bool map has at most two keys
+        }
+        String name = Util.camelCaseFirstUpper(ccName);
+        String hashOfEntry;
+        if (isStringKey()) {
+            w.format("private int _find%sParsedKeyIndex(io.netty.buffer.ByteBuf _buffer, int _keyIdx, int _keyLen) {\n",
+                    name);
+            hashOfEntry = String.format("_%sKeyHashes[_i]", ccName);
+        } else {
+            w.format("private int _find%sParsedKeyIndex(%s key) {\n", name, keyField.getJavaType());
+            hashOfEntry = String.format("LightProtoCodec.hashMapKey(_%sKeys[_i])", ccName);
+        }
+        w.format("    int _n = _%sCount;\n", ccName);
+        w.format("    if (_n == 0) {\n");
+        w.format("        if (++_%sKeyGen == 0) {\n", ccName);
+        w.format("            _%sKeyGen = 1;\n", ccName);
+        w.format("            if (_%sKeyTable != null) {\n", ccName);
+        w.format("                java.util.Arrays.fill(_%sKeyTable, 0L);\n", ccName);
+        w.format("            }\n");
+        w.format("        }\n");
+        w.format("        _%sKeysEntered = 0;\n", ccName);
+        w.format("        return -1;\n");
+        w.format("    }\n");
+        if (isStringKey()) {
+            w.format("    int[] _hs = _%sKeyHashes;\n", ccName);
+            w.format("    if (_hs == null || _hs.length < _%sKeys.length) {\n", ccName);
+            w.format("        _hs = _hs == null ? new int[_%sKeys.length] : java.util.Arrays.copyOf(_hs, _%sKeys.length);\n",
+                    ccName, ccName);
+            w.format("        _%sKeyHashes = _hs;\n", ccName);
+            w.format("    }\n");
+        }
+        w.format("    long[] _t = _%sKeyTable;\n", ccName);
+        w.format("    if (_t == null || _n * 2 >= _t.length) {\n");
+        w.format("        _t = _grow%sKeyTable();\n", name);
+        w.format("    }\n");
+        w.format("    if (_%sKeysEntered == 0) {\n", ccName);
+        if (isStringKey()) {
+            w.format("        LightProtoCodec.StringHolder _k0 = _%sKeys[0];\n", ccName);
+            w.format("        _hs[0] = LightProtoCodec.hashMapKey(_buffer, _k0.idx, _k0.len);\n");
+            w.format("        _enter%sKey(_t, 0, _hs[0]);\n", name);
+        } else {
+            w.format("        _enter%sKey(_t, 0, LightProtoCodec.hashMapKey(_%sKeys[0]));\n", name, ccName);
+        }
+        w.format("        _%sKeysEntered = 1;\n", ccName);
+        w.format("    }\n");
+        w.format("    int _mask = _t.length - 1;\n");
+        w.format("    long _gen = (long) _%sKeyGen << 32;\n", ccName);
+        if (isStringKey()) {
+            w.format("    int _h = LightProtoCodec.hashMapKey(_buffer, _keyIdx, _keyLen);\n");
+        } else {
+            w.format("    int _h = LightProtoCodec.hashMapKey(key);\n");
+        }
+        w.format("    int _s = _h >>> _%sKeyTableShift;\n", ccName);
+        w.format("    for (long _e; ((_e = _t[_s]) & 0xFFFFFFFF00000000L) == _gen; _s = (_s + 1) & _mask) {\n");
+        w.format("        int _i = (int) _e - 1;\n");
+        if (isStringKey()) {
+            // The bytes are only compared when the hashes match
+            w.format("        if (_hs[_i] == _h) {\n");
+            w.format("            LightProtoCodec.StringHolder _ksh = _%sKeys[_i];\n", ccName);
+            w.format("            if (_ksh.len == _keyLen && LightProtoCodec.equalBytes(_buffer, _ksh.idx, _keyIdx, _keyLen)) {\n");
+            w.format("                return _i;\n");
+            w.format("            }\n");
+            w.format("        }\n");
+        } else {
+            w.format("        if (_%sKeys[_i] == key) {\n", ccName);
+            w.format("            return _i;\n");
+            w.format("        }\n");
+        }
+        w.format("    }\n");
+        w.format("    _t[_s] = _gen | (_n + 1);\n");
+        if (isStringKey()) {
+            w.format("    _hs[_n] = _h;\n");
+        }
+        w.format("    _%sKeysEntered = _n + 1;\n", ccName);
+        w.format("    return -1;\n");
+        w.format("}\n");
+
+        // Enters entry _i in a free slot of this generation
+        w.format("private void _enter%sKey(long[] _t, int _i, int _h) {\n", name);
+        w.format("    int _mask = _t.length - 1;\n");
+        w.format("    long _gen = (long) _%sKeyGen << 32;\n", ccName);
+        w.format("    int _s = _h >>> _%sKeyTableShift;\n", ccName);
+        w.format("    while ((_t[_s] & 0xFFFFFFFF00000000L) == _gen) {\n");
+        w.format("        _s = (_s + 1) & _mask;\n");
+        w.format("    }\n");
+        w.format("    _t[_s] = _gen | (_i + 1);\n");
+        w.format("}\n");
+
+        w.format("private long[] _grow%sKeyTable() {\n", name);
+        // 4-8x the entries, at least 16 slots
+        w.format("    int _cap = Math.max(16, Integer.highestOneBit(_%sCount) << 3);\n", ccName);
+        w.format("    long[] _t = new long[_cap];\n");
+        w.format("    _%sKeyTable = _t;\n", ccName);
+        // The slot is the top bits of the hash
+        w.format("    _%sKeyTableShift = Integer.numberOfLeadingZeros(_cap - 1);\n", ccName);
+        w.format("    for (int _i = 0; _i < _%sKeysEntered; _i++) {\n", ccName);
+        w.format("        _enter%sKey(_t, _i, %s);\n", name, hashOfEntry);
+        w.format("    }\n");
+        w.format("    return _t;\n");
         w.format("}\n");
     }
 
@@ -449,10 +577,42 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         w.format("    _hasUnknownFields = true;\n");
         w.format("}\n");
 
-        // Store into arrays
-        generateKeyTempStore(w);
-        generateValueTempStore(w);
-        w.format("_%sCount++;\n", ccName);
+        // As in protobuf-java, a key that is already in the map keeps its position and takes
+        // the new value. The message is then shorter than on the wire, so the wire size must
+        // not be cached as its serialized size.
+        w.format("int _%sIdx = %s;\n", ccName, findParsedKeyIndexCall());
+        if (isMessageValue()) {
+            w.format("if (_%sIdx < 0) {\n", ccName);
+            generateKeyTempStore(w, "_" + ccName + "Count");
+            w.format("    _%sCount++;\n", ccName);
+            w.format("} else {\n");
+            // The new value was parsed into the slot past the count: swap it in, and release
+            // the old value now, as nothing releases the slots past the count
+            w.format("    %s _%sOld = _%sValues[_%sIdx];\n", valueField.getJavaType(), ccName, ccName, ccName);
+            w.format("    _%sValues[_%sIdx] = _%sValues[_%sCount];\n", ccName, ccName, ccName, ccName);
+            w.format("    _%sValues[_%sCount] = _%sOld;\n", ccName, ccName, ccName);
+            w.format("    _%sOld._clearAndRelease();\n", ccName);
+            w.format("    _hasUnknownFields = true;\n");
+            w.format("}\n");
+        } else {
+            w.format("if (_%sIdx < 0) {\n", ccName);
+            w.format("    _%sIdx = _%sCount++;\n", ccName, ccName);
+            generateKeyTempStore(w, "_" + ccName + "Idx");
+            w.format("} else {\n");
+            w.format("    _hasUnknownFields = true;\n");
+            w.format("}\n");
+            generateValueTempStore(w, "_" + ccName + "Idx");
+        }
+    }
+
+    private String findParsedKeyIndexCall() {
+        String name = Util.camelCaseFirstUpper(ccName);
+        if (isStringKey()) {
+            return String.format("_find%sParsedKeyIndex(_buffer, _%sKeyIdx, _%sKeyLen)", name, ccName, ccName);
+        } else if (keyField.isBoolField()) {
+            return String.format("_find%sKeyIndex(_%sKey)", name, ccName);
+        }
+        return String.format("_find%sParsedKeyIndex(_%sKey)", name, ccName);
     }
 
     private void generateKeyTempDecl(PrintWriter w) {
@@ -510,38 +670,38 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         }
     }
 
-    private void generateKeyTempStore(PrintWriter w) {
+    private void generateKeyTempStore(PrintWriter w, String idxExpr) {
         if (isStringKey()) {
-            w.format("LightProtoCodec.StringHolder _%sKsh = _%sKeys[_%sCount];\n", ccName, ccName, ccName);
+            w.format("LightProtoCodec.StringHolder _%sKsh = _%sKeys[%s];\n", ccName, ccName, idxExpr);
             w.format("if (_%sKsh == null) {\n", ccName);
             w.format("    _%sKsh = new LightProtoCodec.StringHolder();\n", ccName);
-            w.format("    _%sKeys[_%sCount] = _%sKsh;\n", ccName, ccName, ccName);
+            w.format("    _%sKeys[%s] = _%sKsh;\n", ccName, idxExpr, ccName);
             w.format("}\n");
             // A missing key is held as "" (idx stays -1), like a put() one
             w.format("_%sKsh.s = _%sKeyFields != 0 ? null : \"\";\n", ccName, ccName);
             w.format("_%sKsh.idx = _%sKeyIdx;\n", ccName, ccName);
             w.format("_%sKsh.len = _%sKeyLen;\n", ccName, ccName);
         } else {
-            w.format("_%sKeys[_%sCount] = _%sKey;\n", ccName, ccName, ccName);
+            w.format("_%sKeys[%s] = _%sKey;\n", ccName, idxExpr, ccName);
         }
     }
 
-    private void generateValueTempStore(PrintWriter w) {
+    private void generateValueTempStore(PrintWriter w, String idxExpr) {
         if (isStringValue()) {
-            w.format("LightProtoCodec.StringHolder _%sVsh = _%sValues[_%sCount];\n", ccName, ccName, ccName);
+            w.format("LightProtoCodec.StringHolder _%sVsh = _%sValues[%s];\n", ccName, ccName, idxExpr);
             w.format("if (_%sVsh == null) {\n", ccName);
             w.format("    _%sVsh = new LightProtoCodec.StringHolder();\n", ccName);
-            w.format("    _%sValues[_%sCount] = _%sVsh;\n", ccName, ccName, ccName);
+            w.format("    _%sValues[%s] = _%sVsh;\n", ccName, idxExpr, ccName);
             w.format("}\n");
             // A missing value is held as "" (idx stays -1), like a put() one
             w.format("_%sVsh.s = _%sValueFields != 0 ? null : \"\";\n", ccName, ccName);
             w.format("_%sVsh.idx = _%sValueIdx;\n", ccName, ccName);
             w.format("_%sVsh.len = _%sValueLen;\n", ccName, ccName);
         } else if (isBytesValue()) {
-            w.format("LightProtoCodec.BytesHolder _%sVbh = _%sValues[_%sCount];\n", ccName, ccName, ccName);
+            w.format("LightProtoCodec.BytesHolder _%sVbh = _%sValues[%s];\n", ccName, ccName, idxExpr);
             w.format("if (_%sVbh == null) {\n", ccName);
             w.format("    _%sVbh = new LightProtoCodec.BytesHolder();\n", ccName);
-            w.format("    _%sValues[_%sCount] = _%sVbh;\n", ccName, ccName, ccName);
+            w.format("    _%sValues[%s] = _%sVbh;\n", ccName, idxExpr, ccName);
             w.format("}\n");
             // A missing value is held as an empty buffer (idx stays -1), like a put() one
             w.format("_%sVbh.b = _%sValueFields != 0 ? null : io.netty.buffer.Unpooled.EMPTY_BUFFER;\n", ccName, ccName);
@@ -550,7 +710,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         } else if (isMessageValue()) {
             // Already stored during parse (parseFrom was called on the array element)
         } else {
-            w.format("_%sValues[_%sCount] = _%sValue;\n", ccName, ccName, ccName);
+            w.format("_%sValues[%s] = _%sValue;\n", ccName, idxExpr, ccName);
         }
     }
 

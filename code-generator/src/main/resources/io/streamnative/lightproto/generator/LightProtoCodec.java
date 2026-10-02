@@ -710,6 +710,97 @@ class LightProtoCodec {
         return true;
     }
 
+    // Secrets of the map key hashes used while parsing. They are random so that keys
+    // crafted to collide in the key table, which would make parsing quadratic, can't be
+    // computed.
+    private static final long MAP_KEY_MULT = java.util.concurrent.ThreadLocalRandom.current().nextLong() | 1;
+    private static final long MAP_KEY_S1 = java.util.concurrent.ThreadLocalRandom.current().nextLong();
+    private static final long MAP_KEY_S2 = java.util.concurrent.ThreadLocalRandom.current().nextLong();
+
+    private static final java.lang.invoke.VarHandle INT_ARRAY_VIEW =
+            MethodHandles.byteArrayViewVarHandle(int[].class, java.nio.ByteOrder.nativeOrder());
+
+    /**
+     * Hash of an integer map key, for the duplicate key check while parsing. Multiply-shift
+     * with a random odd multiplier: the top bits, which the key table uses, are a universal hash.
+     */
+    static int hashMapKey(long key) {
+        return (int) ((key * MAP_KEY_MULT) >>> 32);
+    }
+
+    /**
+     * Hash of the len bytes of b at index, for the duplicate check of string map keys while
+     * parsing. Keys of up to 16 bytes in a heap buffer, the common case, take at most two
+     * loads and one multiplication. Doesn't move the reader index.
+     */
+    static int hashMapKey(ByteBuf b, int index, int len) {
+        if (len <= 16 && b.hasArray()) {
+            byte[] a = b.array();
+            int i = b.arrayOffset() + index;
+            long x;
+            long y;
+            if (len >= 8) {
+                x = (long) LONG_ARRAY_VIEW.get(a, i);
+                y = (long) LONG_ARRAY_VIEW.get(a, i + len - 8);
+            } else if (len >= 4) {
+                x = (int) INT_ARRAY_VIEW.get(a, i) & 0xFFFFFFFFL;
+                y = (int) INT_ARRAY_VIEW.get(a, i + len - 4) & 0xFFFFFFFFL;
+            } else if (len > 0) {
+                x = (a[i] & 0xFFL) << 16 | (a[i + (len >> 1)] & 0xFFL) << 8 | (a[i + len - 1] & 0xFFL);
+                y = 0;
+            } else {
+                x = 0;
+                y = 0;
+            }
+            return (int) mum(x ^ MAP_KEY_S1 ^ len, y ^ MAP_KEY_S2);
+        }
+        return hashMapKeyAnyLength(b, index, len);
+    }
+
+    private static int hashMapKeyAnyLength(ByteBuf b, int index, int len) {
+        int end = index + len;
+        long x;
+        long y;
+        if (len >= 8) {
+            x = b.getLongLE(index);
+            y = b.getLongLE(end - 8);
+            for (int i = index + 8; i < end - 8; i += 8) {
+                x = mum(x ^ MAP_KEY_S1, b.getLongLE(i) ^ MAP_KEY_S2);
+            }
+        } else if (len >= 4) {
+            x = b.getUnsignedIntLE(index);
+            y = b.getUnsignedIntLE(end - 4);
+        } else if (len > 0) {
+            x = (long) b.getUnsignedByte(index) << 16 | (long) b.getUnsignedByte(index + (len >> 1)) << 8
+                    | b.getUnsignedByte(end - 1);
+            y = 0;
+        } else {
+            x = 0;
+            y = 0;
+        }
+        return (int) mum(x ^ MAP_KEY_S1 ^ len, y ^ MAP_KEY_S2);
+    }
+
+    // Folded 64x64->128 bit product, as in wyhash
+    private static long mum(long x, long y) {
+        return Math.multiplyHigh(x, y) ^ (x * y);
+    }
+
+    /** Whether the len bytes of b at index1 and at index2 are equal. Doesn't move the reader index. */
+    static boolean equalBytes(ByteBuf b, int index1, int index2, int len) {
+        if (len == 0) {
+            // A key missing from its map entry has index -1
+            return true;
+        }
+        if (b.hasArray()) {
+            byte[] a = b.array();
+            int off = b.arrayOffset();
+            return java.util.Arrays.equals(a, off + index1, off + index1 + len,
+                    a, off + index2, off + index2 + len);
+        }
+        return ByteBufUtil.equals(b, index1, b, index2, len);
+    }
+
     static void skipUnknownField(int tag, ByteBuf buffer) {
         int tagType = getTagType(tag);
         switch (tagType) {

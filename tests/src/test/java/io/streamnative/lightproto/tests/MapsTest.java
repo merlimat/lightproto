@@ -22,7 +22,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
+import java.io.ByteArrayOutputStream;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -44,6 +47,7 @@ public class MapsTest {
             .putBoolToString(true, "x")
             .putStringToDouble("x", 1.0)
             .putStringToEnum("x", MapsProtos.MapEnumValue.MAP_ENUM_ONE)
+            .putLongToString(1L, "x")
             .build()
             .toByteArray();
 
@@ -622,6 +626,111 @@ public class MapsTest {
         verifyHolderSameAsProtobuf(wire);
     }
 
+    // --- Keys repeated across entries ---
+    // As in protobuf-java, a key repeated on the wire keeps the position of its first entry
+    // and takes the value of its last one.
+
+    @Test
+    public void testDuplicateKeyOnWireKeepsLastValue() throws Exception {
+        // Two string_to_int entries for "k": 1, then 2
+        byte[] wire = {0x0A, 0x05, 0x0A, 0x01, 'k', 0x10, 0x01, 0x0A, 0x05, 0x0A, 0x01, 'k', 0x10, 0x02};
+        assertEquals(Map.of("k", 2), MapsProtos.MapMessage.parseFrom(wire).getStringToIntMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testRepeatedKeyOnWireReplacesValueInPlace() throws Exception {
+        // Key 0 three times, with key 1 after its first occurrence, in every map. The last
+        // message value has no name, so a merge instead of a replace would show.
+        MapsProtos.MapMessage.Builder first = MapsProtos.MapMessage.newBuilder();
+        putEveryMap(first, 0, 1);
+        putEveryMap(first, 1, 2);
+        MapsProtos.MapMessage.Builder second = MapsProtos.MapMessage.newBuilder();
+        putEveryMap(second, 0, 3);
+        MapsProtos.MapMessage.Builder third = MapsProtos.MapMessage.newBuilder();
+        putEveryMap(third, 0, -4);
+        byte[] wire = concat(first.build().toByteArray(), second.build().toByteArray(),
+                third.build().toByteArray());
+
+        MapsProtos.MapMessage pb = MapsProtos.MapMessage.parseFrom(wire);
+        assertEquals(2, pb.getStringToMsgCount());
+        assertFalse(pb.getStringToMsgOrThrow("key-000").hasName());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    @Timeout(10)
+    public void testFirstKeyRepeatedManyTimes() throws Exception {
+        // The first key goes in the key table with the second entry: its repeats must not
+        // enter it again, or they would fill the table. Keys ascend, see putEveryMap().
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (int v = 0; v < 50; v++) {
+            out.writeBytes(MapsProtos.MapMessage.newBuilder()
+                    .putStringToInt("a", v).putIntToString(7, "v" + v).build().toByteArray());
+        }
+        out.writeBytes(MapsProtos.MapMessage.newBuilder()
+                .putStringToInt("b", 1).putIntToString(8, "w").build().toByteArray());
+        byte[] wire = out.toByteArray();
+        MapsProtos.MapMessage pb = MapsProtos.MapMessage.parseFrom(wire);
+        assertEquals(Map.of("a", 49, "b", 1), pb.getStringToIntMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testReplacedMessageValueDoesNotPinParsedBuffer() throws Exception {
+        MapsProtos.MapMessage.Builder first = MapsProtos.MapMessage.newBuilder();
+        putEveryMap(first, 0, 1);
+        MapsProtos.MapMessage.Builder second = MapsProtos.MapMessage.newBuilder();
+        putEveryMap(second, 0, 2);
+        byte[] wire = concat(first.build().toByteArray(), second.build().toByteArray());
+        WeakReference<byte[]> ref = new WeakReference<>(wire);
+
+        MapMessage lp = new MapMessage();
+        lp.parseFrom(wire);
+        wire = null;
+        assertEquals(1, lp.getStringToMsgCount());
+        // The replaced value object stays past the count, out of clear()'s reach: parsing has
+        // to release it
+        lp.clear();
+        for (int i = 0; i < 100 && ref.get() != null; i++) {
+            System.gc();
+            Thread.sleep(10);
+        }
+        assertNull(ref.get(), "the parsed buffer should have been released by clear()");
+    }
+
+    @Test
+    public void testRepeatedKeysOnWireForAllMapSizes() throws Exception {
+        // Sizes on both sides of the point where key lookups switch from a scan to an index.
+        // A single instance parses every message, sizes going up and then back down, which
+        // also covers state left behind by a previous parse of a smaller or larger map.
+        MapMessage lp = new MapMessage();
+        for (int k = 0; k <= 140; k++) {
+            int n = k <= 70 ? k : 140 - k;
+            MapsProtos.MapMessage.Builder first = MapsProtos.MapMessage.newBuilder();
+            for (int i = 0; i < n; i++) {
+                putEveryMap(first, i, i);
+            }
+            // Every third key again with a new value, interleaved with keys seen for the first time
+            MapsProtos.MapMessage.Builder second = MapsProtos.MapMessage.newBuilder();
+            for (int i = 0; i < n; i++) {
+                if (i % 3 == 0) {
+                    putEveryMap(second, i, -1 - i);
+                }
+                if (i % 2 == 0) {
+                    putEveryMap(second, n + i, n + i);
+                }
+            }
+            byte[] wire = concat(first.build().toByteArray(), second.build().toByteArray());
+
+            MapsProtos.MapMessage pb = MapsProtos.MapMessage.parseFrom(wire);
+            lp.parseFrom(wire);
+            // Byte-identical output checks the entries, their order and the serialized size
+            assertArrayEquals(pb.toByteArray(), lp.toByteArray(), "n=" + n);
+            assertSameEntries(pb, lp);
+        }
+    }
+
     // --- Entries with a repeated key or value ---
     // An entry that repeats its key or value reads as the last occurrence, in protobuf-java
     // too, and is serialized with each of them once: smaller than its parsed size.
@@ -798,6 +907,8 @@ public class MapsTest {
         assertEquals(pb.getStringToEnumCount(), lp.getStringToEnumCount());
         pb.getStringToEnumMap().forEach((k, v) ->
                 assertEquals(MapEnumValue.valueOf(v.getNumber()), lp.getStringToEnum(k)));
+        assertEquals(pb.getLongToStringCount(), lp.getLongToStringCount());
+        pb.getLongToStringMap().forEach((k, v) -> assertEquals(v, lp.getLongToString(k)));
     }
 
     /**
@@ -825,6 +936,7 @@ public class MapsTest {
         lp.forEachBoolToString(pb::putBoolToString);
         lp.forEachStringToDouble(pb::putStringToDouble);
         lp.forEachStringToEnum((k, v) -> pb.putStringToEnum(k, MapsProtos.MapEnumValue.forNumber(v.getValue())));
+        lp.forEachLongToString(pb::putLongToString);
         if (lp.hasName()) {
             pb.setName(lp.getName());
         }
@@ -860,6 +972,7 @@ public class MapsTest {
         pb.getBoolToStringMap().forEach(lp::putBoolToString);
         pb.getStringToDoubleMap().forEach(lp::putStringToDouble);
         pb.getStringToEnumMap().forEach((k, v) -> lp.putStringToEnum(k, MapEnumValue.valueOf(v.getNumber())));
+        pb.getLongToStringMap().forEach(lp::putLongToString);
         if (pb.hasName()) {
             lp.setName(pb.getName());
         }
@@ -878,6 +991,37 @@ public class MapsTest {
         pb.getStringToEnumMap().forEach((k, v) -> changed.putStringToEnum(k,
                 v == MapsProtos.MapEnumValue.MAP_ENUM_ZERO
                         ? MapsProtos.MapEnumValue.MAP_ENUM_ONE : MapsProtos.MapEnumValue.MAP_ENUM_ZERO));
+        pb.getLongToStringMap().forEach((k, v) -> changed.putLongToString(k, v + "x"));
         return changed.build();
+    }
+
+    /**
+     * Puts an entry derived from {@code id} with a value derived from {@code v} in every map.
+     * Keys ascend with the id in every map, since protobuf-java's text format prints map
+     * entries sorted by key and LightProto's prints them in map order.
+     */
+    private static void putEveryMap(MapsProtos.MapMessage.Builder b, int id, int v) {
+        String key = String.format("key-%03d", id);
+        MapsProtos.MapNestedValue.Builder nested = MapsProtos.MapNestedValue.newBuilder().setId(v);
+        if (v >= 0) {
+            nested.setName("name-" + v);
+        }
+        b.putStringToInt(key, v);
+        b.putIntToString(id * 7919 - 50000, "value-" + v);
+        b.putStringToMsg(key, nested.build());
+        b.putStringToBytes(key, ByteString.copyFromUtf8("bytes-" + v));
+        b.putBoolToString(id % 2 == 1, "value-" + v);
+        b.putStringToDouble(key, v / 4.0);
+        b.putStringToEnum(key, v % 2 == 0
+                ? MapsProtos.MapEnumValue.MAP_ENUM_ZERO : MapsProtos.MapEnumValue.MAP_ENUM_ONE);
+        b.putLongToString((id - 64L) << 40, "value-" + v);
+    }
+
+    private static byte[] concat(byte[]... parts) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (byte[] part : parts) {
+            out.writeBytes(part);
+        }
+        return out.toByteArray();
     }
 }
