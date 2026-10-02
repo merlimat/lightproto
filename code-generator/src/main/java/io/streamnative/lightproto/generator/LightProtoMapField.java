@@ -449,10 +449,23 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         w.format("    _hasUnknownFields = true;\n");
         w.format("}\n");
 
+        if (isEnumValue()) {
+            // valueOf() parses a number that is not a value of the enum as null: drop the entry,
+            // as unknown values of other enum fields are dropped (protobuf-java moves it to the
+            // unknown fields)
+            w.format("if (_%sValue == null) {\n", ccName);
+            w.format("    _hasUnknownFields = true;\n");
+            w.format("} else {\n");
+        }
+
         // Store into arrays
         generateKeyTempStore(w);
         generateValueTempStore(w);
         w.format("_%sCount++;\n", ccName);
+
+        if (isEnumValue()) {
+            w.format("}\n");
+        }
     }
 
     private void generateKeyTempDecl(PrintWriter w) {
