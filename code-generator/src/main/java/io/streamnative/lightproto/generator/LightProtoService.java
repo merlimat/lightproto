@@ -55,6 +55,9 @@ public class LightProtoService {
         // Marshaller factory method
         generateMarshallerFactory(w);
 
+        // Zero-copy access to messages spanning several gRPC transport buffers
+        generateWrapTransportBuffers(w);
+
         // Marshaller fields (one per unique message type)
         Set<String> uniqueTypes = new LinkedHashSet<>();
         for (ProtoMethodDescriptor m : methods) {
@@ -219,6 +222,16 @@ public class LightProtoService {
         w.println("                                msg.materialize();");
         w.println("                                return msg;");
         w.println("                            }");
+        w.println("                            // A message larger than an HTTP/2 DATA frame spans several transport");
+        w.println("                            // buffers: parse it in place from all of them. A smaller one that");
+        w.println("                            // straddles two frames is cheaper to copy");
+        w.println("                            io.netty.buffer.ByteBuf buf = size >= LightProtoCodec.SEGMENTED_PARSE_MIN");
+        w.println("                                    && nioBuf != null && stream.markSupported() ? wrapTransportBuffers(stream, size) : null;");
+        w.println("                            if (buf != null) {");
+        w.println("                                msg.parseFrom(buf, size);");
+        w.println("                                msg.materialize();");
+        w.println("                                return msg;");
+        w.println("                            }");
         w.println("                        }");
         w.println("                        // Copy once into an exact-size array: readAllBytes() would read into");
         w.println("                        // 8-16 KiB chunks and then copy again");
@@ -239,6 +252,36 @@ public class LightProtoService {
         w.println("                }");
         w.println("            }");
         w.println("        };");
+        w.println("    }\n");
+    }
+
+    private void generateWrapTransportBuffers(PrintWriter w) {
+        w.println("    /**");
+        w.println("     * Wraps the next {@code size} bytes of a gRPC stream, without copying, in a buffer over the");
+        w.println("     * transport buffers holding them. skip() would hand each buffer it moves past back to the");
+        w.println("     * transport, unless the stream is marked: then they stay valid until close(). Returns null,");
+        w.println("     * with the stream reset, if the stream doesn't expose a buffer for every byte.");
+        w.println("     */");
+        w.println("    private static io.netty.buffer.ByteBuf wrapTransportBuffers(java.io.InputStream stream, int size)");
+        w.println("            throws java.io.IOException {");
+        w.println("        java.nio.ByteBuffer[] buffers = new java.nio.ByteBuffer[8];");
+        w.println("        int count = 0;");
+        w.println("        stream.mark(size);");
+        w.println("        for (int remaining = size; remaining > 0; ) {");
+        w.println("            java.nio.ByteBuffer nioBuf = ((io.grpc.HasByteBuffer) stream).getByteBuffer();");
+        w.println("            int length = nioBuf == null ? 0 : Math.min(nioBuf.remaining(), remaining);");
+        w.println("            if (length == 0 || stream.skip(length) != length) {");
+        w.println("                stream.reset();");
+        w.println("                return null;");
+        w.println("            }");
+        w.println("            nioBuf.limit(nioBuf.position() + length);");
+        w.println("            if (count == buffers.length) {");
+        w.println("                buffers = java.util.Arrays.copyOf(buffers, count * 2);");
+        w.println("            }");
+        w.println("            buffers[count++] = nioBuf;");
+        w.println("            remaining -= length;");
+        w.println("        }");
+        w.println("        return new LightProtoCodec.SegmentedByteBuf(buffers, count);");
         w.println("    }\n");
     }
 

@@ -29,6 +29,8 @@ message GrpcPayloadItem {
     string key = 1;
     // The item value.
     bytes value = 2;
+    // A 64-bit varint field.
+    int64 version = 3;
 }
 
 // A message with every field kind that refers to the parsed buffer until materialize().

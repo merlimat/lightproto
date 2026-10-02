@@ -20,6 +20,7 @@ import io.grpc.internal.CompositeReadableBuffer;
 import io.grpc.internal.ReadableBuffers;
 import io.streamnative.lightproto.tests.EchoServiceGrpc;
 import io.streamnative.lightproto.tests.GrpcPayload;
+import io.streamnative.lightproto.tests.GrpcPayloadItem;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -42,8 +43,9 @@ import org.openjdk.jmh.infra.Blackhole;
  * Parsing a message from the stream gRPC transports pass to the marshaller: a
  * {@code ReadableBuffers.BufferInputStream} over the buffers the message was received in, here
  * direct memory like the pooled buffers of Netty. Compares the generated marshaller with the
- * readAllBytes() copy that parse() made before. Run with {@code -prof gc} and compare
- * gc.alloc.rate.norm for the bytes allocated per message.
+ * copies that parse() made before: readAllBytes(), then an exact-size array for messages spread
+ * over several buffers. Run with {@code -prof gc} and compare gc.alloc.rate.norm for the bytes
+ * allocated per message.
  */
 @State(Scope.Benchmark)
 @BenchmarkMode(Mode.AverageTime)
@@ -56,7 +58,7 @@ public class GrpcParseBenchmark {
     private static final MethodDescriptor.Marshaller<GrpcPayload> MARSHALLER =
             EchoServiceGrpc.getEchoMethod().getRequestMarshaller();
 
-    /** Size of the bytes field. */
+    /** Size of the bytes field, or of all the records. */
     @Param({"100", "4096", "65536"})
     public int size;
 
@@ -64,13 +66,37 @@ public class GrpcParseBenchmark {
     @Param({"1", "4"})
     public int buffers;
 
+    /** One bytes field, or records of 64 bytes with small fields, as in a range scan response. */
+    @Param({"value", "records"})
+    public String shape;
+
+    /**
+     * How the bytes fields are read: as slices, or as arrays, which the getters return without a
+     * copy for a materialized message.
+     */
+    @Param({"slice", "array"})
+    public String access;
+
     private ByteBuffer[] memory;
+    private boolean arrays;
 
     @Setup
     public void setup() {
-        byte[] data = new byte[size];
-        new Random(42).nextBytes(data);
-        byte[] serialized = new GrpcPayload().setName("/benchmark/key").setData(data).toByteArray();
+        arrays = access.equals("array");
+        Random random = new Random(42);
+        GrpcPayload payload = new GrpcPayload().setName("/benchmark/key");
+        if (shape.equals("value")) {
+            byte[] data = new byte[size];
+            random.nextBytes(data);
+            payload.setData(data);
+        } else {
+            for (int i = 0; i < Math.max(1, size / 64); i++) {
+                byte[] value = new byte[32];
+                random.nextBytes(value);
+                payload.addItem().setKey(String.format("/key/%010d", i)).setValue(value).setVersion(random.nextLong());
+            }
+        }
+        byte[] serialized = payload.toByteArray();
         memory = new ByteBuffer[buffers];
         int pieceSize = (serialized.length + buffers - 1) / buffers;
         for (int i = 0; i < buffers; i++) {
@@ -99,14 +125,33 @@ public class GrpcParseBenchmark {
         }
     }
 
+    /** The exact-size copy that parse() made of a message spread over several buffers. */
+    @Benchmark
+    public void readNBytes(Blackhole bh) throws IOException {
+        try (InputStream stream = openStream()) {
+            int length = stream.available();
+            byte[] bytes = new byte[length];
+            stream.readNBytes(bytes, 0, length);
+            GrpcPayload msg = new GrpcPayload();
+            msg.parseFrom(bytes);
+            consume(bh, msg);
+        }
+    }
+
     @Benchmark
     public void marshaller(Blackhole bh) {
         consume(bh, MARSHALLER.parse(openStream()));
     }
 
-    private static void consume(Blackhole bh, GrpcPayload msg) {
-        // Reading the fields also decodes those that the readAllBytes() path leaves lazy
+    private void consume(Blackhole bh, GrpcPayload msg) {
+        // Reading the fields also decodes those that the copying paths leave lazy
         bh.consume(msg.getName());
-        bh.consume(msg.getDataSlice());
+        bh.consume(arrays ? msg.getData() : msg.getDataSlice());
+        for (int i = 0; i < msg.getItemsCount(); i++) {
+            GrpcPayloadItem item = msg.getItemAt(i);
+            bh.consume(item.getKey());
+            bh.consume(arrays ? item.getValue() : item.getValueSlice());
+            bh.consume(item.getVersion());
+        }
     }
 }

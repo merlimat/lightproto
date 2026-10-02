@@ -63,31 +63,90 @@ public class GrpcMarshallerParseTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {100, 64 * 1024})
-    void testMessageAcrossBuffersIsCopiedInOnePass(int dataSize) {
+    @ValueSource(ints = {16 * 1024, 64 * 1024})
+    void testLargeMessageAcrossBuffersIsParsedInPlace(int dataSize) {
         GrpcPayload expected = GrpcPayloads.create(dataSize, dataSize);
         List<TrackingBuffer> buffers = track(split(expected.toByteArray(), 3), true);
 
         GrpcPayload parsed = MARSHALLER.parse(openStream(buffers));
 
         for (TrackingBuffer buffer : buffers) {
-            assertEquals(1, buffer.readCalls, "Each buffer should be read by a single call");
-            assertEquals(buffer.size, buffer.bytesRead);
+            assertEquals(0, buffer.bytesRead, "The message should not be copied out of the buffers");
+            assertEquals(1, buffer.closeCount);
+        }
+        // close() overwrote the buffers, so the message must no longer refer to them
+        assertEquals(expected, parsed);
+    }
+
+    @Test
+    void testFieldsSplitAcrossBuffersAreParsedInPlace() {
+        // One byte per buffer: every tag, length, and value straddles buffers
+        GrpcPayload expected = GrpcPayloads.create(3, 16 * 1024);
+        byte[] serialized = expected.toByteArray();
+        List<TrackingBuffer> buffers = track(split(serialized, serialized.length), true);
+
+        GrpcPayload parsed = MARSHALLER.parse(openStream(buffers));
+
+        for (TrackingBuffer buffer : buffers) {
+            assertEquals(0, buffer.bytesRead, "The message should not be copied out of the buffers");
             assertEquals(1, buffer.closeCount);
         }
         assertEquals(expected, parsed);
     }
 
     @Test
-    void testBufferWithoutByteBufferSupportIsCopiedInOnePass() {
-        GrpcPayload expected = GrpcPayloads.create(1, 100);
-        List<TrackingBuffer> buffers = track(split(expected.toByteArray(), 1), false);
+    void testSmallMessageAcrossBuffersIsCopiedInOnePass() {
+        // Below one HTTP/2 frame, a message only spans buffers when it straddles two frames, and
+        // copying it is cheaper than parsing it in place
+        GrpcPayload expected = GrpcPayloads.create(2, 100);
+        List<TrackingBuffer> buffers = track(split(expected.toByteArray(), 3), true);
 
         GrpcPayload parsed = MARSHALLER.parse(openStream(buffers));
 
-        TrackingBuffer buffer = buffers.get(0);
-        assertEquals(1, buffer.readCalls);
-        assertEquals(buffer.size, buffer.bytesRead);
+        assertCopiedInOnePass(buffers);
+        assertEquals(expected, parsed);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 3})
+    void testBufferWithoutByteBufferSupportIsCopiedInOnePass(int pieces) {
+        GrpcPayload expected = GrpcPayloads.create(1, 20 * 1024);
+        List<TrackingBuffer> buffers = track(split(expected.toByteArray(), pieces), false);
+
+        GrpcPayload parsed = MARSHALLER.parse(openStream(buffers));
+
+        assertCopiedInOnePass(buffers);
+        assertEquals(expected, parsed);
+    }
+
+    @Test
+    void testBuffersWithoutMarkSupportAreCopiedInOnePass() {
+        // Without a mark, skipping a buffer would hand it back before the message is parsed
+        GrpcPayload expected = GrpcPayloads.create(4, 20 * 1024);
+        List<TrackingBuffer> buffers = new ArrayList<>();
+        for (ByteBuffer piece : split(expected.toByteArray(), 3)) {
+            buffers.add(new TrackingBuffer(piece, true, false));
+        }
+
+        GrpcPayload parsed = MARSHALLER.parse(openStream(buffers));
+
+        assertCopiedInOnePass(buffers);
+        assertEquals(expected, parsed);
+    }
+
+    @Test
+    void testEmptyBufferWithinMessageIsCopiedInOnePass() {
+        // An empty buffer stops the in-place parse after it skipped the first buffer, so the
+        // stream must be reset before it is copied
+        GrpcPayload expected = GrpcPayloads.create(5, 20 * 1024);
+        List<ByteBuffer> memory = split(expected.toByteArray(), 2);
+        memory.add(1, ByteBuffer.allocateDirect(0));
+        List<TrackingBuffer> buffers = track(memory, true);
+
+        GrpcPayload parsed = MARSHALLER.parse(openStream(buffers));
+
+        assertCopiedInOnePass(List.of(buffers.get(0), buffers.get(2)));
+        assertEquals(1, buffers.get(1).closeCount);
         assertEquals(expected, parsed);
     }
 
@@ -135,6 +194,14 @@ public class GrpcMarshallerParseTest {
         assertTrue(perMessage < 4096, "Allocated " + perMessage + " bytes per message");
     }
 
+    private static void assertCopiedInOnePass(List<TrackingBuffer> buffers) {
+        for (TrackingBuffer buffer : buffers) {
+            assertEquals(1, buffer.readCalls, "Each buffer should be read by a single call");
+            assertEquals(buffer.size, buffer.bytesRead);
+            assertEquals(1, buffer.closeCount);
+        }
+    }
+
     /** Splits a message into pieces of direct memory, like the pooled buffers of Netty. */
     private static List<ByteBuffer> split(byte[] message, int pieces) {
         List<ByteBuffer> memory = new ArrayList<>();
@@ -179,15 +246,21 @@ public class GrpcMarshallerParseTest {
         final ByteBuffer memory;
         final int size;
         final boolean byteBufferSupported;
+        final boolean markSupported;
         int readCalls;
         int bytesRead;
         int closeCount;
 
         TrackingBuffer(ByteBuffer memory, boolean byteBufferSupported) {
+            this(memory, byteBufferSupported, true);
+        }
+
+        TrackingBuffer(ByteBuffer memory, boolean byteBufferSupported, boolean markSupported) {
             super(ReadableBuffers.wrap(memory.duplicate()));
             this.memory = memory;
             this.size = memory.remaining();
             this.byteBufferSupported = byteBufferSupported;
+            this.markSupported = markSupported;
         }
 
         @Override
@@ -206,6 +279,11 @@ public class GrpcMarshallerParseTest {
         @Override
         public boolean byteBufferSupported() {
             return byteBufferSupported;
+        }
+
+        @Override
+        public boolean markSupported() {
+            return markSupported;
         }
 
         @Override
