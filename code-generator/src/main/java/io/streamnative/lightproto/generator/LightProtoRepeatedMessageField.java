@@ -65,7 +65,11 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
     @Override
     public void parse(PrintWriter w) {
         w.format("int _%sSize = LightProtoCodec.readVarInt(_buffer);\n", ccName);
-        w.format("%s().parseFrom(_buffer, _%sSize);\n", addForParseName(), ccName);
+        w.format("%s _%sMsg = %s();\n", field.getJavaType(), ccName, addForParseName());
+        w.format("_%sMsg.parseFrom(_buffer, _%sSize);\n", ccName, ccName);
+        w.format("if (!_%sMsg._isSizeCached()) {\n", ccName);
+        w.format("    _hasUnknownFields = true;\n");
+        w.format("}\n");
     }
 
     private String addForParseName() {
