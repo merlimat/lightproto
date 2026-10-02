@@ -426,10 +426,16 @@ public class LightProtoMessage {
         w.println("         */");
         w.format("        @Override public int writeTo(io.netty.buffer.ByteBuf _b) {\n");
         w.format("            int _serializedSize = getSerializedSize();\n");
+        // The in-place paths grow the buffer before the path is chosen: growing a
+        // composite buffer adds a component, after which it has neither a single
+        // backing array nor a single NIO region (an empty composite reports an array
+        // whatever component it then allocates).
+        w.format("            if (_b.hasArray() || (_serializedSize > LightProtoCodec.NIO_WRITE_MIN && _b.nioBufferCount() == 1)) {\n");
+        w.format("                _b.ensureWritable(_serializedSize);\n");
+        w.format("            }\n");
         w.format("            if (_b.hasArray()) {\n");
         // Heap buffers are written in place through their backing array.
         // ensureWritable may replace the backing array, so it is resolved after.
-        w.format("                _b.ensureWritable(_serializedSize);\n");
         w.format("                int _writeIdx = _b.writerIndex();\n");
         w.format("                _writeTo(_b.array(), _b.arrayOffset() + _writeIdx);\n");
         w.format("                _b.writerIndex(_writeIdx + _serializedSize);\n");
@@ -440,7 +446,6 @@ public class LightProtoMessage {
         // scratch array and no bulk copy are needed. Below NIO_WRITE_MIN the
         // per-put cost outweighs the copy it saves, so small messages stay on the
         // scratch path.
-        w.format("                _b.ensureWritable(_serializedSize);\n");
         w.format("                int _writeIdx = _b.writerIndex();\n");
         w.format("                java.nio.ByteBuffer _nb = _b.internalNioBuffer(_writeIdx, _serializedSize);\n");
         w.format("                _writeTo(_nb, _nb.position());\n");

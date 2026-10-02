@@ -44,6 +44,16 @@ public class WriteTargetTypesTest {
         return ab;
     }
 
+    // Above LightProtoCodec.NIO_WRITE_MIN (512 bytes), so a direct target with a single
+    // NIO region is written in place
+    private static AddressBook large() {
+        AddressBook ab = new AddressBook();
+        Person p = ab.addPerson();
+        p.setName("x".repeat(600));
+        p.setId(8);
+        return ab;
+    }
+
     private static byte[] drain(ByteBuf b) {
         byte[] out = new byte[b.readableBytes()];
         b.readBytes(out);
@@ -97,6 +107,53 @@ public class WriteTargetTypesTest {
             assertArrayEquals(expected, drain(b));
         } finally {
             b.release();
+        }
+    }
+
+    @Test
+    public void testFullSingleComponentHeapComposite() {
+        // hasArray() is true until growing the composite adds a second component
+        AddressBook ab = sample();
+        byte[] expected = ab.toByteArray();
+        CompositeByteBuf b = Unpooled.compositeBuffer();
+        try {
+            b.addComponent(true, Unpooled.buffer(8).writeZero(8));
+            ab.writeTo(b);
+            b.skipBytes(8);
+            assertArrayEquals(expected, drain(b));
+        } finally {
+            b.release();
+        }
+    }
+
+    @Test
+    public void testFullSingleComponentDirectComposite() {
+        // nioBufferCount() is 1 until growing the composite adds a second component
+        AddressBook ab = large();
+        byte[] expected = ab.toByteArray();
+        CompositeByteBuf b = PooledByteBufAllocator.DEFAULT.compositeDirectBuffer();
+        try {
+            b.addComponent(true, PooledByteBufAllocator.DEFAULT.directBuffer(8).writeZero(8));
+            ab.writeTo(b);
+            b.skipBytes(8);
+            assertArrayEquals(expected, drain(b));
+        } finally {
+            b.release();
+        }
+    }
+
+    @Test
+    public void testEmptyDirectComposite() {
+        // An empty composite reports an array, then grows with a direct component
+        for (AddressBook ab : new AddressBook[] {sample(), large()}) {
+            byte[] expected = ab.toByteArray();
+            CompositeByteBuf b = PooledByteBufAllocator.DEFAULT.compositeDirectBuffer();
+            try {
+                ab.writeTo(b);
+                assertArrayEquals(expected, drain(b));
+            } finally {
+                b.release();
+            }
         }
     }
 
