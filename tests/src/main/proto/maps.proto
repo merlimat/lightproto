@@ -21,6 +21,7 @@ message MapMessage {
     map<bool, string> bool_to_string = 5;
     map<string, double> string_to_double = 6;
     map<string, MapEnumValue> string_to_enum = 7;
+    map<string, bool> string_to_bool = 8;
     optional string name = 10;
 }
 

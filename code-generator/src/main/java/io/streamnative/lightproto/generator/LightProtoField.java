@@ -88,7 +88,9 @@ public abstract class LightProtoField {
     }
 
     static boolean isVarInt64Type(String protoType) {
-        return "int64".equals(protoType) || "uint64".equals(protoType) || "sint64".equals(protoType);
+        // A bool is read as a 64-bit varint too, as protobuf reads it
+        return "int64".equals(protoType) || "uint64".equals(protoType) || "sint64".equals(protoType)
+                || "bool".equals(protoType);
     }
 
     public void docs(PrintWriter w) {

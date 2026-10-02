@@ -108,6 +108,32 @@ public class TruncatedInputTest {
     }
 
     @Test
+    public void testTruncatedBoolInMapKey() {
+        // MapMessage's only 64-bit varints are bools (bool_to_string keys and
+        // string_to_bool values), so this exercises the check emission driven by bool
+        // types. bool_to_string entry: key varint truncated at the end of the buffer.
+        byte[] data = {0x2A, 0x02, 0x08, (byte) 0xFF};
+
+        assertThrows(IndexOutOfBoundsException.class,
+                () -> new MapMessage().parseFrom(data));
+
+        ByteBuf pooled = PooledByteBufAllocator.DEFAULT.directBuffer(data.length);
+        try {
+            pooled.writeBytes(data);
+            assertThrows(IndexOutOfBoundsException.class,
+                    () -> new MapMessage().parseFrom(pooled, pooled.readableBytes()));
+        } finally {
+            pooled.release();
+        }
+
+        // Sanity: the same entry with a complete key parses
+        byte[] valid = {0x2A, 0x02, 0x08, 0x01};
+        MapMessage parsed = new MapMessage();
+        parsed.parseFrom(valid);
+        assertEquals(1, parsed.getBoolToStringCount());
+    }
+
+    @Test
     public void testValidMessageOnTightCapacityBuffer() {
         // A valid message on a zero-slack buffer never overruns
         Proto3Message src = new Proto3Message();

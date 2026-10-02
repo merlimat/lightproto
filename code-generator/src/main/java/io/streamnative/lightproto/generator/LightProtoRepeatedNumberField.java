@@ -53,14 +53,16 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
 
     @Override
     public void parse(PrintWriter w) {
-        w.format("%s(%s);\n", Util.camelCase("add", singularName), LightProtoNumberField.parseNumber(field));
+        LightProtoNumberField.parseNumberInto(w, field, "_" + ccName,
+                Util.camelCase("add", singularName) + "(%s);");
     }
 
     public void parsePacked(PrintWriter w) {
         w.format("int _%s = LightProtoCodec.readVarInt(_buffer);\n", Util.camelCase(singularName, "size"));
         w.format("int _%s = _buffer.readerIndex() + _%s;\n", Util.camelCase(singularName, "endIdx"), Util.camelCase(singularName, "size"));
         w.format("while (_buffer.readerIndex() < _%s) {\n", Util.camelCase(singularName, "endIdx"));
-        w.format("%s(%s);\n", Util.camelCase("add", singularName), LightProtoNumberField.parseNumber(field));
+        LightProtoNumberField.parseNumberInto(w, field, "_" + ccName + "Packed",
+                Util.camelCase("add", singularName) + "(%s);");
         w.format("}\n");
     }
 

@@ -484,7 +484,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("            _%sKeyIdx = _buffer.readerIndex();\n", ccName);
             w.format("            _buffer.skipBytes(_%sKeyLen);\n", ccName);
         } else {
-            w.format("            _%sKey = %s;\n", ccName, LightProtoNumberField.parseNumber(keyField));
+            LightProtoNumberField.parseNumberInto(w, keyField, "_" + ccName + "KeyVarint", "_" + ccName + "Key = %s;");
         }
     }
 
@@ -506,7 +506,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("                _hasUnknownFields = true;\n");
             w.format("            }\n");
         } else {
-            w.format("            _%sValue = %s;\n", ccName, LightProtoNumberField.parseNumber(valueField));
+            LightProtoNumberField.parseNumberInto(w, valueField, "_" + ccName + "ValueVarint", "_" + ccName + "Value = %s;");
         }
     }
 

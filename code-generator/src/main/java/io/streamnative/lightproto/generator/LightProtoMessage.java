@@ -190,10 +190,11 @@ public class LightProtoMessage {
         }
         // The wire size is the serialized size only if re-serializing reproduces the
         // wire. Besides unknown fields skipped here, _hasUnknownFields is set by enum
-        // parsers that drop an unknown value, by map entries with unknown fields or an
-        // omitted key or value, and after parsing a nested message whose
-        // _isSizeCached() is false. Only message and map field parsers emit that last
-        // check, so messages without such fields keep their parseFrom() unchanged.
+        // parsers that drop an unknown value, by bool parsers that read a value other
+        // than 0 or 1, by map entries with unknown fields or an omitted key or value,
+        // and after parsing a nested message whose _isSizeCached() is false. Only
+        // message and map field parsers emit that last check, so messages without such
+        // fields keep their parseFrom() unchanged.
         w.format("            if (!_hasUnknownFields) {\n");
         w.format("                _cachedSize = _size;\n");
         w.format("            }\n");
