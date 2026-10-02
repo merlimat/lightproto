@@ -425,8 +425,24 @@ class LightProtoCodec {
         }
     }
 
+    /**
+     * Writes n as an unsigned 32-bit varint, at most 5 bytes, as protobuf encodes
+     * zigzag-encoded sint32 values: what computeVarUIntSize() counts.
+     * writeRawVarInt() is the int32 encoding, which writes a negative n as 10 bytes.
+     */
+    static int writeRawVarUInt(byte[] a, int i, int n) {
+        while (true) {
+            if ((n & ~0x7F) == 0) {
+                a[i++] = (byte) n;
+                return i;
+            }
+            a[i++] = (byte) ((n & 0x7F) | 0x80);
+            n >>>= 7;
+        }
+    }
+
     static int writeRawSignedVarInt(byte[] a, int i, int n) {
-        return writeRawVarInt(a, i, encodeZigZag32(n));
+        return writeRawVarUInt(a, i, encodeZigZag32(n));
     }
 
     static int writeRawSignedVarInt64(byte[] a, int i, long n) {
@@ -513,8 +529,19 @@ class LightProtoCodec {
         }
     }
 
+    static int writeRawVarUInt(java.nio.ByteBuffer nb, int i, int n) {
+        while (true) {
+            if ((n & ~0x7F) == 0) {
+                nb.put(i++, (byte) n);
+                return i;
+            }
+            nb.put(i++, (byte) ((n & 0x7F) | 0x80));
+            n >>>= 7;
+        }
+    }
+
     static int writeRawSignedVarInt(java.nio.ByteBuffer nb, int i, int n) {
-        return writeRawVarInt(nb, i, encodeZigZag32(n));
+        return writeRawVarUInt(nb, i, encodeZigZag32(n));
     }
 
     static int writeRawSignedVarInt64(java.nio.ByteBuffer nb, int i, long n) {

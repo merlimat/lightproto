@@ -20,6 +20,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Arrays;
 
@@ -202,6 +204,13 @@ public class NumbersTest {
         assertEquals(-12L, lpn.getXSint64());
 
         verify(lpn, pbn.build());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1 << 30, -(1 << 30) - 1, Integer.MAX_VALUE, Integer.MIN_VALUE})
+    public void testSint32WithZigZagTopBitSet(int value) throws Exception {
+        // The zigzag encoding of these values is >= 2^31 unsigned: still a 5-byte varint
+        verify(new Numbers().setXSint32(value), NumbersOuterClass.Numbers.newBuilder().setXSint32(value).build());
     }
 
     @Test
