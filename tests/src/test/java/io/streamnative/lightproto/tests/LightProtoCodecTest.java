@@ -53,8 +53,9 @@ public class LightProtoCodecTest {
             CompositeByteBuf buffer = PooledByteBufAllocator.DEFAULT.compositeBuffer();
             try {
                 ByteBuf prefix = PooledByteBufAllocator.DEFAULT.buffer(6).writeZero(6);
-                ByteBuf encoded = PooledByteBufAllocator.DEFAULT.buffer(10);
-                LightProtoCodec.writeVarInt64(encoded, value);
+                byte[] raw = new byte[10];
+                ByteBuf encoded = PooledByteBufAllocator.DEFAULT.buffer(10)
+                        .writeBytes(raw, 0, LightProtoCodec.writeRawVarInt64(raw, 0, value));
                 buffer.addComponents(true, prefix, encoded);
                 buffer.readerIndex(6);
                 assertEquals("io.netty.buffer.AdvancedLeakAwareCompositeByteBuf", buffer.getClass().getName());
@@ -72,7 +73,7 @@ public class LightProtoCodecTest {
     @ParameterizedTest
     @ValueSource(ints = {Integer.MIN_VALUE, -1000, -100, -2, -1, 0, 1, 10, 100, 1000, (int) 1e4, (int) 1e5, (int) 1e7, Integer.MAX_VALUE})
     public void testVarInt(int i) throws Exception {
-        LightProtoCodec.writeVarInt(bb, i);
+        bb.writerIndex(LightProtoCodec.writeRawVarInt(b, 0, i));
 
         CodedInputStream is = CodedInputStream.newInstance(b);
         int res = is.readRawVarint32();
@@ -87,7 +88,7 @@ public class LightProtoCodecTest {
     @ParameterizedTest
     @ValueSource(longs = {Long.MIN_VALUE, -10000000, -100, -2, -1, 0, 1, 10, 100, 10000000, (long) 2e18, (long) 2e32, (long) 2e43, (long) 2e57, Long.MAX_VALUE})
     public void testVarInt64(long i) throws Exception {
-        LightProtoCodec.writeVarInt64(bb, i);
+        bb.writerIndex(LightProtoCodec.writeRawVarInt64(b, 0, i));
 
         CodedInputStream is = CodedInputStream.newInstance(b);
         long res = is.readRawVarint64();
@@ -102,7 +103,7 @@ public class LightProtoCodecTest {
     @ParameterizedTest
     @ValueSource(ints = {Integer.MIN_VALUE, -1000, -100, -2, -1, 0, 1, 10, 100, 1000, Integer.MAX_VALUE})
     public void testSignedVarInt(int i) throws Exception {
-        LightProtoCodec.writeSignedVarInt(bb, i);
+        bb.writerIndex(LightProtoCodec.writeRawSignedVarInt(b, 0, i));
 
         CodedInputStream is = CodedInputStream.newInstance(b);
         int res = is.readSInt32();
@@ -117,7 +118,7 @@ public class LightProtoCodecTest {
     @ParameterizedTest
     @ValueSource(longs = {Long.MIN_VALUE, -10000000, -100, -2, -1, 0, 1, 10, 100, 10000000, Long.MAX_VALUE})
     public void testSignedVarInt64(long i) throws Exception {
-        LightProtoCodec.writeSignedVarInt64(bb, i);
+        bb.writerIndex(LightProtoCodec.writeRawSignedVarInt64(b, 0, i));
 
         CodedInputStream is = CodedInputStream.newInstance(b);
         long res = is.readSInt64();
@@ -132,7 +133,7 @@ public class LightProtoCodecTest {
     @ParameterizedTest
     @ValueSource(ints = {Integer.MIN_VALUE, -1000, -100, -2, -1, 0, 1, 10, 100, 1000, Integer.MAX_VALUE})
     public void testFixedInt32(int i) throws Exception {
-        LightProtoCodec.writeFixedInt32(bb, i);
+        bb.writerIndex(LightProtoCodec.writeRawLittleEndian32(b, 0, i));
 
         CodedInputStream is = CodedInputStream.newInstance(b);
         int res = is.readFixed32();
@@ -145,7 +146,7 @@ public class LightProtoCodecTest {
     @ParameterizedTest
     @ValueSource(longs = {Long.MIN_VALUE, -10000000, -100, -2, -1, 0, 1, 10, 100, 10000000, Long.MAX_VALUE})
     public void testFixedInt64(long i) throws Exception {
-        LightProtoCodec.writeFixedInt64(bb, i);
+        bb.writerIndex(LightProtoCodec.writeRawLittleEndian64(b, 0, i));
 
         CodedInputStream is = CodedInputStream.newInstance(b);
         long res = is.readFixed64();
@@ -158,7 +159,7 @@ public class LightProtoCodecTest {
     @ParameterizedTest
     @ValueSource(floats = {Float.MIN_VALUE, -1000.0f, -100.0f, -2.f, -1.f, 0f, 1f, 10f, 100f, 1000f, Float.MAX_VALUE})
     public void testFloat(float i) throws Exception {
-        LightProtoCodec.writeFloat(bb, i);
+        bb.writerIndex(LightProtoCodec.writeRawFloat(b, 0, i));
 
         CodedInputStream is = CodedInputStream.newInstance(b);
         float res = is.readFloat();
@@ -171,7 +172,7 @@ public class LightProtoCodecTest {
     @ParameterizedTest
     @ValueSource(doubles = {Double.MIN_VALUE, -10000000.0, -100.0, -2.0, -1.0, 0.0, 1.0, 10.0, 100.0, 10000000.0, Double.MAX_VALUE})
     public void testDouble(double i) throws Exception {
-        LightProtoCodec.writeDouble(bb, i);
+        bb.writerIndex(LightProtoCodec.writeRawDouble(b, 0, i));
 
         CodedInputStream is = CodedInputStream.newInstance(b);
         double res = is.readDouble();
@@ -187,9 +188,8 @@ public class LightProtoCodecTest {
         byte[] sb = s.getBytes(StandardCharsets.UTF_8);
         assertEquals(sb.length, LightProtoCodec.computeStringUTF8Size(s));
 
-        LightProtoCodec.writeVarInt(bb, sb.length);
-        int idx = bb.writerIndex();
-        LightProtoCodec.writeString(bb, s, sb.length);
+        int idx = LightProtoCodec.writeRawVarInt(b, 0, sb.length);
+        bb.writerIndex(LightProtoCodec.writeRawString(b, idx, s, sb.length));
 
         CodedInputStream is = CodedInputStream.newInstance(b);
         assertEquals(s, is.readString());

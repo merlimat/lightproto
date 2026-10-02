@@ -44,7 +44,6 @@ class LightProtoCodec {
     private static final boolean HAS_UNSAFE;
     private static final long STRING_VALUE_OFFSET;
     static final long BYTE_ARRAY_BASE_OFFSET;
-    static final boolean LITTLE_ENDIAN = java.nio.ByteOrder.nativeOrder() == java.nio.ByteOrder.LITTLE_ENDIAN;
     // True when JDK compact strings are enabled (default since JDK 9).
     // When disabled via -XX:-CompactStrings, String's internal byte[] uses UTF-16
     // and we must not use the Unsafe string fast paths.
@@ -139,32 +138,12 @@ class LightProtoCodec {
         return tag >>> TAG_TYPE_BITS;
     }
 
-    static void writeVarInt(ByteBuf b, int n) {
-        if (n >= 0) {
-            _writeVarInt(b, n);
-        } else {
-            writeVarInt64(b, n);
-        }
-    }
-
-    static void writeSignedVarInt(ByteBuf b, int n) {
-        writeVarInt(b, encodeZigZag32(n));
-    }
-
     static int readSignedVarInt(ByteBuf b) {
         return decodeZigZag32(readVarInt(b));
     }
 
     static long readSignedVarInt64(ByteBuf b) {
         return decodeZigZag64(readVarInt64(b));
-    }
-
-    static void writeFloat(ByteBuf b, float n) {
-        writeFixedInt32(b, Float.floatToRawIntBits(n));
-    }
-
-    static void writeDouble(ByteBuf b, double n) {
-        writeFixedInt64(b, Double.doubleToRawLongBits(n));
     }
 
     static float readFloat(ByteBuf b) {
@@ -175,49 +154,12 @@ class LightProtoCodec {
         return Double.longBitsToDouble(readFixedInt64(b));
     }
 
-    private static void _writeVarInt(ByteBuf b, int n) {
-        while (true) {
-            if ((n & ~0x7F) == 0) {
-                b.writeByte(n);
-                return;
-            } else {
-                b.writeByte((n & 0x7F) | 0x80);
-                n >>>= 7;
-            }
-        }
-    }
-
-    static void writeVarInt64(ByteBuf b, long value) {
-        while (true) {
-            if ((value & ~0x7FL) == 0) {
-                b.writeByte((int) value);
-                return;
-            } else {
-                b.writeByte(((int) value & 0x7F) | 0x80);
-                value >>>= 7;
-            }
-        }
-    }
-
-    static void writeFixedInt32(ByteBuf b, int n) {
-        b.writeIntLE(n);
-    }
-
-    static void writeFixedInt64(ByteBuf b, long n) {
-        b.writeLongLE(n);
-    }
-
     static int readFixedInt32(ByteBuf b) {
         return b.readIntLE();
     }
 
     static long readFixedInt64(ByteBuf b) {
         return b.readLongLE();
-    }
-
-
-    static void writeSignedVarInt64(ByteBuf b, long n) {
-        writeVarInt64(b, encodeZigZag64(n));
     }
 
     private static int encodeZigZag32(final int n) {
@@ -394,27 +336,6 @@ class LightProtoCodec {
 
     static int computeStringUTF8Size(String s) {
         return ByteBufUtil.utf8Bytes(s);
-    }
-
-    static void writeString(ByteBuf b, String s, int bytesCount) {
-        if (s.length() == bytesCount) {
-            // ASCII fast path: read String's internal byte[] directly via Unsafe,
-            // then writeBytes in a single copy with zero intermediate allocation.
-            // On JDK 9+ compact strings, ASCII strings use LATIN1 coder and the
-            // internal value byte[] contains exactly the bytes we need.
-            if (HAS_UNSAFE && COMPACT_STRINGS) {
-                try {
-                    Object _v = (Object) MH_GET_OBJECT.invokeExact((Object) s, STRING_VALUE_OFFSET);
-                    b.writeBytes((byte[]) _v, 0, bytesCount);
-                } catch (Throwable t) {
-                    throw new RuntimeException(t);
-                }
-            } else {
-                b.writeBytes(s.getBytes(StandardCharsets.ISO_8859_1));
-            }
-        } else {
-            ByteBufUtil.reserveAndWriteUtf8(b, s, bytesCount);
-        }
     }
 
     // --- Raw write methods for zero-overhead serialization ---
