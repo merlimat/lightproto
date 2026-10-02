@@ -44,7 +44,6 @@ class LightProtoCodec {
     private static final boolean HAS_UNSAFE;
     private static final long STRING_VALUE_OFFSET;
     static final long BYTE_ARRAY_BASE_OFFSET;
-    static final boolean LITTLE_ENDIAN = java.nio.ByteOrder.nativeOrder() == java.nio.ByteOrder.LITTLE_ENDIAN;
     // True when JDK compact strings are enabled (default since JDK 9).
     // When disabled via -XX:-CompactStrings, String's internal byte[] uses UTF-16
     // and we must not use the Unsafe string fast paths.
