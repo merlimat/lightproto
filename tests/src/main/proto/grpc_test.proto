@@ -19,6 +19,44 @@ message GrpcResponse {
     int32 result = 2;
 }
 
+// A nested message carried by GrpcPayload.
+message GrpcPayloadItem {
+    // The item key.
+    string key = 1;
+    // The item value.
+    bytes value = 2;
+}
+
+// A message with every field kind that refers to the parsed buffer until materialize().
+message GrpcPayload {
+    // A string field.
+    string name = 1;
+    // A bytes field.
+    bytes data = 2;
+    // A nested message field.
+    GrpcPayloadItem nested = 3;
+    // A repeated string field.
+    repeated string tags = 4;
+    // A repeated bytes field.
+    repeated bytes chunks = 5;
+    // A repeated message field.
+    repeated GrpcPayloadItem items = 6;
+    // A map with string values.
+    map<string, string> labels = 7;
+    // A map with bytes values.
+    map<string, bytes> blobs = 8;
+    // A map with message values.
+    map<string, GrpcPayloadItem> index = 9;
+}
+
+// A service that echoes payloads back, for tests over a real transport.
+service EchoService {
+    // Returns the request.
+    rpc Echo (GrpcPayload) returns (GrpcPayload);
+    // Returns each request as it arrives.
+    rpc EchoStream (stream GrpcPayload) returns (stream GrpcPayload);
+}
+
 // A test service with all four RPC patterns.
 service TestService {
     // A simple unary RPC.
