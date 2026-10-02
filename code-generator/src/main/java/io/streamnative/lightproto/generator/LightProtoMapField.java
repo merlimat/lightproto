@@ -436,6 +436,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         w.format("            _%sHasValue = true;\n", ccName);
         w.format("            break;\n");
         w.format("        default:\n");
+        w.format("            _hasUnknownFields = true;\n");
         w.format("            LightProtoCodec.skipUnknownField(_%sEntryTag, _buffer);\n", ccName);
         w.format("            break;\n");
         w.format("    }\n");
@@ -498,7 +499,11 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         } else if (isMessageValue()) {
             // The slot was already allocated and reset right after _ensureCapacity().
             w.format("            int _%sMsgSize = LightProtoCodec.readVarInt(_buffer);\n", ccName);
-            w.format("            _%sValues[_%sCount].parseFrom(_buffer, _%sMsgSize);\n", ccName, ccName, ccName);
+            w.format("            %s _%sMsg = _%sValues[_%sCount];\n", valueField.getJavaType(), ccName, ccName, ccName);
+            w.format("            _%sMsg.parseFrom(_buffer, _%sMsgSize);\n", ccName, ccName);
+            w.format("            if (!_%sMsg._isSizeCached()) {\n", ccName);
+            w.format("                _hasUnknownFields = true;\n");
+            w.format("            }\n");
         } else {
             w.format("            _%sValue = %s;\n", ccName, LightProtoNumberField.parseNumber(valueField));
         }

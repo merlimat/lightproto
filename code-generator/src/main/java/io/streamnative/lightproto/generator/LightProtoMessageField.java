@@ -59,7 +59,11 @@ public class LightProtoMessageField extends LightProtoField {
     @Override
     public void parse(PrintWriter w) {
         w.format("int %sSize = LightProtoCodec.readVarInt(_buffer);\n", ccName);
-        w.format("%s().parseFrom(_buffer, %sSize);\n", Util.camelCase("set", ccName), ccName);
+        w.format("%s _%sMsg = %s();\n", field.getJavaType(), ccName, Util.camelCase("set", ccName));
+        w.format("_%sMsg.parseFrom(_buffer, %sSize);\n", ccName, ccName);
+        w.format("if (!_%sMsg._isSizeCached()) {\n", ccName);
+        w.format("    _hasUnknownFields = true;\n");
+        w.format("}\n");
     }
 
     @Override
