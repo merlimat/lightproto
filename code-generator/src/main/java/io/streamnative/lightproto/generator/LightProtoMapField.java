@@ -386,6 +386,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         // Declare temp variables for key and value
         generateKeyTempDecl(w);
         generateValueTempDecl(w);
+        // A key or value missing from the wire takes its default
+        w.format("boolean _%sHasKey = false;\n", ccName);
+        w.format("boolean _%sHasValue = false;\n", ccName);
 
         // Ensure capacity before parsing (message values parse directly into the array)
         w.format("_ensure%sCapacity();\n", Util.camelCaseFirstUpper(ccName));
@@ -405,14 +408,22 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         w.format("    switch (_%sEntryTag) {\n", ccName);
         w.format("        case %s:\n", keyTagConstant());
         generateKeyTempParse(w);
+        w.format("            _%sHasKey = true;\n", ccName);
         w.format("            break;\n");
         w.format("        case %s:\n", valueTagConstant());
         generateValueTempParse(w);
+        w.format("            _%sHasValue = true;\n", ccName);
         w.format("            break;\n");
         w.format("        default:\n");
         w.format("            LightProtoCodec.skipUnknownField(_%sEntryTag, _buffer);\n", ccName);
         w.format("            break;\n");
         w.format("    }\n");
+        w.format("}\n");
+
+        // Entries are serialized with an explicit key and value: as with unknown fields,
+        // a missing one makes the parsed size differ from the serialized size.
+        w.format("if (!_%sHasKey || !_%sHasValue) {\n", ccName, ccName);
+        w.format("    _hasUnknownFields = true;\n");
         w.format("}\n");
 
         // Store into arrays
@@ -479,7 +490,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    _%sKsh = new LightProtoCodec.StringHolder();\n", ccName);
             w.format("    _%sKeys[_%sCount] = _%sKsh;\n", ccName, ccName, ccName);
             w.format("}\n");
-            w.format("_%sKsh.s = null;\n", ccName);
+            // A missing key is held as "" (idx stays -1), like a put() one
+            w.format("_%sKsh.s = _%sHasKey ? null : \"\";\n", ccName, ccName);
             w.format("_%sKsh.idx = _%sKeyIdx;\n", ccName, ccName);
             w.format("_%sKsh.len = _%sKeyLen;\n", ccName, ccName);
         } else {
@@ -494,7 +506,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    _%sVsh = new LightProtoCodec.StringHolder();\n", ccName);
             w.format("    _%sValues[_%sCount] = _%sVsh;\n", ccName, ccName, ccName);
             w.format("}\n");
-            w.format("_%sVsh.s = null;\n", ccName);
+            // A missing value is held as "" (idx stays -1), like a put() one
+            w.format("_%sVsh.s = _%sHasValue ? null : \"\";\n", ccName, ccName);
             w.format("_%sVsh.idx = _%sValueIdx;\n", ccName, ccName);
             w.format("_%sVsh.len = _%sValueLen;\n", ccName, ccName);
         } else if (isBytesValue()) {
@@ -503,7 +516,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    _%sVbh = new LightProtoCodec.BytesHolder();\n", ccName);
             w.format("    _%sValues[_%sCount] = _%sVbh;\n", ccName, ccName, ccName);
             w.format("}\n");
-            w.format("_%sVbh.b = null;\n", ccName);
+            // A missing value is held as an empty buffer (idx stays -1), like a put() one
+            w.format("_%sVbh.b = _%sHasValue ? null : io.netty.buffer.Unpooled.EMPTY_BUFFER;\n", ccName, ccName);
             w.format("_%sVbh.idx = _%sValueIdx;\n", ccName, ccName);
             w.format("_%sVbh.len = _%sValueLen;\n", ccName, ccName);
         } else if (isMessageValue()) {
@@ -518,7 +532,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         if (f.getJavaType().equals("long")) return "0L";
         if (f.getJavaType().equals("float")) return "0.0f";
         if (f.getJavaType().equals("double")) return "0.0";
-        if (f.isEnumField()) return "null";
+        // Same implicit default as a singular enum field (LightProtoEnumField)
+        if (f.isEnumField()) return String.format("%s.valueOf(0)", f.getJavaType());
         return "0";
     }
 

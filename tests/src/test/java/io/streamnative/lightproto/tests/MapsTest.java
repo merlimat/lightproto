@@ -16,6 +16,8 @@
 package io.streamnative.lightproto.tests;
 
 import com.google.protobuf.ByteString;
+import com.google.protobuf.TextFormat;
+import com.google.protobuf.util.JsonFormat;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +34,18 @@ public class MapsTest {
 
     private byte[] b1 = new byte[4096];
     private ByteBuf bb1 = Unpooled.wrappedBuffer(b1);
+
+    // One entry with a non-default key and value in each map
+    private static final byte[] NON_DEFAULT_ENTRIES = MapsProtos.MapMessage.newBuilder()
+            .putStringToInt("x", 1)
+            .putIntToString(1, "x")
+            .putStringToMsg("x", MapsProtos.MapNestedValue.newBuilder().setId(1).setName("x").build())
+            .putStringToBytes("x", ByteString.copyFrom(new byte[]{1}))
+            .putBoolToString(true, "x")
+            .putStringToDouble("x", 1.0)
+            .putStringToEnum("x", MapsProtos.MapEnumValue.MAP_ENUM_ONE)
+            .build()
+            .toByteArray();
 
     @BeforeEach
     public void setup() {
@@ -482,6 +496,107 @@ public class MapsTest {
         assertEquals("gp-test", lpParsed.getName());
     }
 
+    // --- Entries with an omitted key or value ---
+    // A map entry is encoded as `message Entry { K key = 1; V value = 2; }`, so a key or
+    // value missing from the wire reads as its default. protobuf-java always writes both,
+    // so these entries are built by hand. Each test checks how protobuf-java reads the
+    // entry, then that LightProto behaves like protobuf-java on it.
+
+    @Test
+    public void testOmittedStringValue() throws Exception {
+        // int_to_string entry {key: 7}
+        byte[] wire = {0x12, 0x02, 0x08, 0x07};
+        assertEquals(Map.of(7, ""), MapsProtos.MapMessage.parseFrom(wire).getIntToStringMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testOmittedKeyWithStringValue() throws Exception {
+        // int_to_string entry {value: "v"}
+        byte[] wire = {0x12, 0x03, 0x12, 0x01, 'v'};
+        assertEquals(Map.of(0, "v"), MapsProtos.MapMessage.parseFrom(wire).getIntToStringMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testOmittedBytesValue() throws Exception {
+        // string_to_bytes entry {key: "k"}
+        byte[] wire = {0x22, 0x03, 0x0A, 0x01, 'k'};
+        assertEquals(Map.of("k", ByteString.EMPTY), MapsProtos.MapMessage.parseFrom(wire).getStringToBytesMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testOmittedKeyWithBytesValue() throws Exception {
+        // string_to_bytes entry {value: "v"}
+        byte[] wire = {0x22, 0x03, 0x12, 0x01, 'v'};
+        assertEquals(Map.of("", ByteString.copyFromUtf8("v")),
+                MapsProtos.MapMessage.parseFrom(wire).getStringToBytesMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testOmittedEnumValue() throws Exception {
+        // string_to_enum entry {key: "k"}
+        byte[] wire = {0x3A, 0x03, 0x0A, 0x01, 'k'};
+        assertEquals(Map.of("k", MapsProtos.MapEnumValue.MAP_ENUM_ZERO),
+                MapsProtos.MapMessage.parseFrom(wire).getStringToEnumMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testOmittedKeyWithEnumValue() throws Exception {
+        // string_to_enum entry {value: MAP_ENUM_ONE}
+        byte[] wire = {0x3A, 0x02, 0x10, 0x01};
+        assertEquals(Map.of("", MapsProtos.MapEnumValue.MAP_ENUM_ONE),
+                MapsProtos.MapMessage.parseFrom(wire).getStringToEnumMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testOmittedMessageValue() throws Exception {
+        // string_to_msg entry {key: "k"}
+        byte[] wire = {0x1A, 0x03, 0x0A, 0x01, 'k'};
+        assertEquals(Map.of("k", MapsProtos.MapNestedValue.getDefaultInstance()),
+                MapsProtos.MapMessage.parseFrom(wire).getStringToMsgMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testOmittedKeyWithMessageValue() throws Exception {
+        // string_to_msg entry {value: {id: 5}}
+        byte[] wire = {0x1A, 0x04, 0x12, 0x02, 0x08, 0x05};
+        assertEquals(Map.of("", MapsProtos.MapNestedValue.newBuilder().setId(5).build()),
+                MapsProtos.MapMessage.parseFrom(wire).getStringToMsgMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testOmittedNumericKeyAndValues() throws Exception {
+        byte[] wire = {
+                0x0A, 0x03, 0x0A, 0x01, 'k', // string_to_int entry {key: "k"}
+                0x2A, 0x03, 0x12, 0x01, 'v', // bool_to_string entry {value: "v"}
+                0x32, 0x03, 0x0A, 0x01, 'd', // string_to_double entry {key: "d"}
+        };
+        MapsProtos.MapMessage pb = MapsProtos.MapMessage.parseFrom(wire);
+        assertEquals(Map.of("k", 0), pb.getStringToIntMap());
+        assertEquals(Map.of(false, "v"), pb.getBoolToStringMap());
+        assertEquals(Map.of("d", 0.0), pb.getStringToDoubleMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testOmittedKeyAndValue() throws Exception {
+        // An empty entry in int_to_string, string_to_msg, string_to_bytes and string_to_enum
+        byte[] wire = {0x12, 0x00, 0x1A, 0x00, 0x22, 0x00, 0x3A, 0x00};
+        MapsProtos.MapMessage pb = MapsProtos.MapMessage.parseFrom(wire);
+        assertEquals(Map.of(0, ""), pb.getIntToStringMap());
+        assertEquals(Map.of("", MapsProtos.MapNestedValue.getDefaultInstance()), pb.getStringToMsgMap());
+        assertEquals(Map.of("", ByteString.EMPTY), pb.getStringToBytesMap());
+        assertEquals(Map.of("", MapsProtos.MapEnumValue.MAP_ENUM_ZERO), pb.getStringToEnumMap());
+        verifySameAsProtobuf(wire);
+    }
+
     // --- Helpers ---
 
     private byte[] serialize(MapMessage msg) {
@@ -523,5 +638,155 @@ public class MapsTest {
         if (original.hasName()) {
             assertEquals(original.getName(), parsed.getName());
         }
+    }
+
+    private static MapMessage parse(byte[] wire) {
+        MapMessage lp = new MapMessage();
+        lp.parseFrom(wire);
+        return lp;
+    }
+
+    /**
+     * Parses {@code wire} with LightProto and protobuf-java, and checks that LightProto behaves
+     * like protobuf-java: same entries through get(), the counts and forEach(), same serialized
+     * bytes, JSON and text format, same equals() results, also after copyFrom(), materialize()
+     * and when parsing into a reused instance.
+     */
+    private void verifySameAsProtobuf(byte[] wire) throws Exception {
+        MapsProtos.MapMessage pb = MapsProtos.MapMessage.parseFrom(wire);
+
+        // Each check parses the wire again, so that it starts from the freshly parsed state
+        assertSameEntries(pb, parse(wire));
+        assertEquals(pb, toProtobuf(parse(wire)));
+        assertEquals(pb.getSerializedSize(), parse(wire).getSerializedSize());
+        assertArrayEquals(pb.toByteArray(), serialize(parse(wire)));
+        assertEquals(JsonFormat.printer().omittingInsignificantWhitespace().print(pb), parse(wire).toJson());
+        assertEquals(TextFormat.printer().printToString(pb), parse(wire).toTextFormat());
+
+        // Compared with the same entries set explicitly (protobuf-java holds a parsed entry
+        // like a put() one, so pb stands for both), with different values, and with none
+        MapsProtos.MapMessage changed = withChangedValues(pb);
+        assertSameEquality(
+                new MapsProtos.MapMessage[]{pb, pb, pb, changed, MapsProtos.MapMessage.getDefaultInstance()},
+                new MapMessage[]{parse(wire), parse(wire), fromProtobuf(pb), fromProtobuf(changed), new MapMessage()});
+
+        assertSameContent(pb, new MapMessage().copyFrom(parse(wire)));
+
+        MapMessage materialized = parse(wire);
+        materialized.materialize();
+        assertSameContent(pb, materialized);
+
+        // The pooled holders of a reused instance must not leak previous entries
+        MapMessage reused = parse(NON_DEFAULT_ENTRIES);
+        reused.parseFrom(wire);
+        assertSameContent(pb, reused);
+    }
+
+    /** Checks the entries and the serialized form against protobuf-java. */
+    private void assertSameContent(MapsProtos.MapMessage pb, MapMessage lp) {
+        assertSameEntries(pb, lp);
+        assertEquals(pb, toProtobuf(lp));
+        assertEquals(pb.getSerializedSize(), lp.getSerializedSize());
+        assertArrayEquals(pb.toByteArray(), serialize(lp));
+    }
+
+    /** Checks that LightProto has protobuf-java's entries, through the counts and get(). */
+    private static void assertSameEntries(MapsProtos.MapMessage pb, MapMessage lp) {
+        assertEquals(pb.getStringToIntCount(), lp.getStringToIntCount());
+        pb.getStringToIntMap().forEach((k, v) -> assertEquals(v, lp.getStringToInt(k)));
+        assertEquals(pb.getIntToStringCount(), lp.getIntToStringCount());
+        pb.getIntToStringMap().forEach((k, v) -> assertEquals(v, lp.getIntToString(k)));
+        assertEquals(pb.getStringToMsgCount(), lp.getStringToMsgCount());
+        pb.getStringToMsgMap().forEach((k, v) -> assertEquals(v, toProtobuf(lp.getStringToMsg(k))));
+        assertEquals(pb.getStringToBytesCount(), lp.getStringToBytesCount());
+        pb.getStringToBytesMap().forEach((k, v) -> assertEquals(v, ByteString.copyFrom(lp.getStringToBytes(k))));
+        assertEquals(pb.getBoolToStringCount(), lp.getBoolToStringCount());
+        pb.getBoolToStringMap().forEach((k, v) -> assertEquals(v, lp.getBoolToString(k)));
+        assertEquals(pb.getStringToDoubleCount(), lp.getStringToDoubleCount());
+        pb.getStringToDoubleMap().forEach((k, v) -> assertEquals(v, lp.getStringToDouble(k)));
+        assertEquals(pb.getStringToEnumCount(), lp.getStringToEnumCount());
+        pb.getStringToEnumMap().forEach((k, v) ->
+                assertEquals(MapEnumValue.valueOf(v.getNumber()), lp.getStringToEnum(k)));
+    }
+
+    /**
+     * Checks that LightProto's equals() gives protobuf-java's result for every pair of
+     * corresponding messages, and that equal LightProto messages have the same hashCode().
+     */
+    private static void assertSameEquality(MapsProtos.MapMessage[] pbs, MapMessage[] lps) {
+        for (int i = 0; i < pbs.length; i++) {
+            for (int j = 0; j < pbs.length; j++) {
+                assertEquals(pbs[i].equals(pbs[j]), lps[i].equals(lps[j]), "equals " + i + ", " + j);
+                if (lps[i].equals(lps[j])) {
+                    assertEquals(lps[i].hashCode(), lps[j].hashCode(), "hashCode " + i + ", " + j);
+                }
+            }
+        }
+    }
+
+    /** Rebuilds the message with protobuf-java, reading its maps through forEach. */
+    private static MapsProtos.MapMessage toProtobuf(MapMessage lp) {
+        MapsProtos.MapMessage.Builder pb = MapsProtos.MapMessage.newBuilder();
+        lp.forEachStringToInt(pb::putStringToInt);
+        lp.forEachIntToString(pb::putIntToString);
+        lp.forEachStringToMsg((k, v) -> pb.putStringToMsg(k, toProtobuf(v)));
+        lp.forEachStringToBytes((k, v) -> pb.putStringToBytes(k, ByteString.copyFrom(v)));
+        lp.forEachBoolToString(pb::putBoolToString);
+        lp.forEachStringToDouble(pb::putStringToDouble);
+        lp.forEachStringToEnum((k, v) -> pb.putStringToEnum(k, MapsProtos.MapEnumValue.forNumber(v.getValue())));
+        if (lp.hasName()) {
+            pb.setName(lp.getName());
+        }
+        return pb.build();
+    }
+
+    private static MapsProtos.MapNestedValue toProtobuf(MapNestedValue lp) {
+        MapsProtos.MapNestedValue.Builder pb = MapsProtos.MapNestedValue.newBuilder();
+        if (lp.hasId()) {
+            pb.setId(lp.getId());
+        }
+        if (lp.hasName()) {
+            pb.setName(lp.getName());
+        }
+        return pb.build();
+    }
+
+    /** Builds the LightProto message with protobuf-java's entries, set explicitly with put(). */
+    private static MapMessage fromProtobuf(MapsProtos.MapMessage pb) {
+        MapMessage lp = new MapMessage();
+        pb.getStringToIntMap().forEach(lp::putStringToInt);
+        pb.getIntToStringMap().forEach(lp::putIntToString);
+        pb.getStringToMsgMap().forEach((k, v) -> {
+            MapNestedValue lpValue = lp.putStringToMsg(k);
+            if (v.hasId()) {
+                lpValue.setId(v.getId());
+            }
+            if (v.hasName()) {
+                lpValue.setName(v.getName());
+            }
+        });
+        pb.getStringToBytesMap().forEach((k, v) -> lp.putStringToBytes(k, v.toByteArray()));
+        pb.getBoolToStringMap().forEach(lp::putBoolToString);
+        pb.getStringToDoubleMap().forEach(lp::putStringToDouble);
+        pb.getStringToEnumMap().forEach((k, v) -> lp.putStringToEnum(k, MapEnumValue.valueOf(v.getNumber())));
+        if (pb.hasName()) {
+            lp.setName(pb.getName());
+        }
+        return lp;
+    }
+
+    /** Returns the message with the same keys and every value changed. */
+    private static MapsProtos.MapMessage withChangedValues(MapsProtos.MapMessage pb) {
+        MapsProtos.MapMessage.Builder changed = MapsProtos.MapMessage.newBuilder();
+        pb.getStringToIntMap().forEach((k, v) -> changed.putStringToInt(k, v + 1));
+        pb.getIntToStringMap().forEach((k, v) -> changed.putIntToString(k, v + "x"));
+        pb.getStringToMsgMap().forEach((k, v) -> changed.putStringToMsg(k, v.toBuilder().setId(v.getId() + 1).build()));
+        pb.getStringToBytesMap().forEach((k, v) -> changed.putStringToBytes(k, v.concat(ByteString.copyFromUtf8("x"))));
+        pb.getBoolToStringMap().forEach((k, v) -> changed.putBoolToString(k, v + "x"));
+        pb.getStringToDoubleMap().forEach((k, v) -> changed.putStringToDouble(k, v + 1));
+        pb.getStringToEnumMap().forEach((k, v) -> changed.putStringToEnum(k,
+                v == MapsProtos.MapEnumValue.MAP_ENUM_ZERO
+                        ? MapsProtos.MapEnumValue.MAP_ENUM_ONE : MapsProtos.MapEnumValue.MAP_ENUM_ZERO));
+        return changed.build();
     }
 }
