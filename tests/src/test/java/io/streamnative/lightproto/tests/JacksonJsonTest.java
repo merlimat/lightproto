@@ -148,6 +148,45 @@ public class JacksonJsonTest {
     }
 
     @Test
+    public void testNonAsciiStringJson() throws Exception {
+        // Two-, three- and four-byte UTF-8 sequences; the last is a surrogate pair in Java
+        String value = "café 日本 😀 end";
+        S lpS = new S();
+        lpS.setId(value);
+        lpS.addName("😀");
+
+        String json = lpS.toJson();
+
+        Strings.S pbS = Strings.S.newBuilder().setId(value).addNames("😀").build();
+        assertEquals(JsonFormat.printer().omittingInsignificantWhitespace().print(pbS), json);
+    }
+
+    @Test
+    public void testControlCharacterEscaping() throws Exception {
+        // Every control character, each followed by a non-ASCII character, then quotes,
+        // a backslash and a surrogate pair: escapes interleaved with multi-byte runs
+        StringBuilder sb = new StringBuilder("start");
+        for (char c = 0; c < 0x20; c++) {
+            sb.append(c).append('é');
+        }
+        sb.append("\"quoted\" back\\slash 😀 end");
+        String value = sb.toString();
+        S lpS = new S();
+        lpS.setId(value);
+
+        String json = lpS.toJson();
+        assertTrue(json.chars().noneMatch(c -> c < 0x20), json);
+
+        Strings.S.Builder builder = Strings.S.newBuilder();
+        JsonFormat.parser().merge(json, builder);
+        assertEquals(value, builder.build().getId());
+
+        S parsed = new S();
+        parsed.parseFromJson(json);
+        assertEquals(value, parsed.getId());
+    }
+
+    @Test
     public void testMapJsonCrossCompatibility() throws Exception {
         MapMessage lpMap = new MapMessage();
         lpMap.putStringToInt("a", 1);

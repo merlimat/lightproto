@@ -1198,8 +1198,19 @@ class LightProtoCodec {
 
     static void writeJsonString(ByteBuf b, String s) {
         b.writeByte('"');
-        for (int i = 0; i < s.length(); i++) {
+        // Characters that need no escape are written in runs, one UTF-8 encode per
+        // run. A run never splits a surrogate pair: only ASCII characters are escaped.
+        int start = 0;
+        int len = s.length();
+        for (int i = 0; i < len; i++) {
             char c = s.charAt(i);
+            if (c >= 0x20 && c != '"' && c != '\\') {
+                continue;
+            }
+            if (i > start) {
+                ByteBufUtil.writeUtf8(b, s, start, i);
+            }
+            start = i + 1;
             switch (c) {
                 case '"':
                     b.writeByte('\\');
@@ -1230,17 +1241,16 @@ class LightProtoCodec {
                     b.writeByte('t');
                     break;
                 default:
-                    if (c < 0x20) {
-                        b.writeByte('\\');
-                        b.writeByte('u');
-                        b.writeByte(HEX_CHARS[(c >> 12) & 0xF]);
-                        b.writeByte(HEX_CHARS[(c >> 8) & 0xF]);
-                        b.writeByte(HEX_CHARS[(c >> 4) & 0xF]);
-                        b.writeByte(HEX_CHARS[c & 0xF]);
-                    } else {
-                        b.writeCharSequence(String.valueOf(c), java.nio.charset.StandardCharsets.UTF_8);
-                    }
+                    b.writeByte('\\');
+                    b.writeByte('u');
+                    b.writeByte(HEX_CHARS[(c >> 12) & 0xF]);
+                    b.writeByte(HEX_CHARS[(c >> 8) & 0xF]);
+                    b.writeByte(HEX_CHARS[(c >> 4) & 0xF]);
+                    b.writeByte(HEX_CHARS[c & 0xF]);
             }
+        }
+        if (start < len) {
+            ByteBufUtil.writeUtf8(b, s, start, len);
         }
         b.writeByte('"');
     }
@@ -1249,8 +1259,7 @@ class LightProtoCodec {
         byte[] raw = new byte[len];
         data.getBytes(offset, raw);
         b.writeByte('"');
-        b.writeCharSequence(java.util.Base64.getEncoder().encodeToString(raw),
-                java.nio.charset.StandardCharsets.US_ASCII);
+        b.writeBytes(java.util.Base64.getEncoder().encode(raw));
         b.writeByte('"');
     }
 
