@@ -17,13 +17,25 @@ package io.streamnative.lightproto.generator;
 
 import io.netty.buffer.AbstractByteBuf;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.buffer.UnpooledHeapByteBuf;
+import io.netty.util.internal.PlatformDependent;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.ReadOnlyBufferException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.GatheringByteChannel;
+import java.nio.channels.ScatteringByteChannel;
 import java.nio.charset.StandardCharsets;
 
 class LightProtoCodec {
@@ -437,6 +449,13 @@ class LightProtoCodec {
     // message this large; below the threshold the walk is skipped entirely.
     static final int CLEAR_RETAIN_MAX = 64 * 1024;
 
+    // A gRPC message of at least this size that spans several transport buffers is parsed in
+    // place from them, through a SegmentedByteBuf, instead of copied. A smaller one only spans
+    // buffers when it straddles two HTTP/2 DATA frames (16 KiB by default), and wrapping its
+    // pieces costs more than the copy saves: 1.5-3x on 100-byte to 4 KiB messages over 4 buffers,
+    // where a 64 KiB value read as a byte[] parses in 0.54x the time of the copy.
+    static final int SEGMENTED_PARSE_MIN = 16 * 1024;
+
     /** Returns current if it can hold size bytes, otherwise a larger replacement. */
     static byte[] scratchFor(byte[] current, int size) {
         if (current != null && current.length >= size) {
@@ -743,6 +762,427 @@ class LightProtoCodec {
     static boolean isWholeArray(ByteBuf b, int len) {
         return b != null && b.getClass() == UnpooledHeapByteBuf.class
                 && b.readerIndex() == 0 && b.array().length == len;
+    }
+
+    /**
+     * A read-only ByteBuf over a sequence of ByteBuffers, to parse a message received in several
+     * network buffers without copying it. Unlike a CompositeByteBuf, a read within the segment of the
+     * previous read takes one range check and one memory read, without a component buffer's own
+     * bounds and reference count checks. The ByteBuffers stay owned by the caller: they must remain
+     * valid and unchanged while this buffer is read. Its reference count is fixed, which also spares
+     * each read the accessibility check of a reference-counted buffer.
+     */
+    static final class SegmentedByteBuf extends AbstractByteBuf {
+        private final ByteBuffer[] segments;
+        // offsets[i] is the index of the first byte of segments[i], offsets[segments.length] the capacity
+        private final int[] offsets;
+        // The memory address of each direct segment, or 0 to read it through its ByteBuffer
+        private final long[] addresses;
+        private ByteBuffer current;
+        private long currentAddress;
+        private int currentStart;
+        private int currentEnd;
+
+        /** Wraps the remaining bytes of the first {@code count} buffers, taking over their positions. */
+        SegmentedByteBuf(ByteBuffer[] buffers, int count) {
+            super(0);
+            segments = new ByteBuffer[count];
+            offsets = new int[count + 1];
+            addresses = new long[count];
+            boolean unsafe = PlatformDependent.hasUnsafe();
+            for (int i = 0; i < count; i++) {
+                ByteBuffer b = buffers[i];
+                // Each segment is read from index 0 to its limit
+                segments[i] = b.position() == 0 ? b : b.slice();
+                offsets[i + 1] = offsets[i] + b.remaining();
+                addresses[i] = unsafe && b.isDirect() ? PlatformDependent.directBufferAddress(segments[i]) : 0;
+            }
+            maxCapacity(offsets[count]);
+            setIndex(0, offsets[count]);
+            if (offsets[count] > 0) {
+                select(0);
+            }
+        }
+
+        /** Makes the segment holding {@code index} the current one. */
+        private void select(int index) {
+            if (index < 0 || index >= capacity()) {
+                // Only the unchecked varint64 reads go past the end, on truncated input
+                throw new IndexOutOfBoundsException("index: " + index + " (expected: range(0, " + capacity() + "))");
+            }
+            // The last segment starting at or before index, which skips empty segments
+            int low = 0;
+            int high = segments.length - 1;
+            while (low < high) {
+                int mid = (low + high + 1) >>> 1;
+                if (offsets[mid] <= index) {
+                    low = mid;
+                } else {
+                    high = mid - 1;
+                }
+            }
+            current = segments[low];
+            currentAddress = addresses[low];
+            currentStart = offsets[low];
+            currentEnd = offsets[low + 1];
+        }
+
+        /** Returns a view of the bytes from {@code index} to the end of their segment, at most {@code length}. */
+        private ByteBuffer view(int index, int length) {
+            if (index < currentStart || index >= currentEnd) {
+                select(index);
+            }
+            ByteBuffer view = current.duplicate();
+            int position = index - currentStart;
+            view.limit(position + Math.min(length, currentEnd - index)).position(position);
+            return view;
+        }
+
+        @Override
+        protected byte _getByte(int index) {
+            if (index < currentStart || index >= currentEnd) {
+                select(index);
+            }
+            int i = index - currentStart;
+            return currentAddress != 0 ? PlatformDependent.getByte(currentAddress + i) : current.get(i);
+        }
+
+        @Override
+        protected short _getShort(int index) {
+            return (short) (_getByte(index) << 8 | _getByte(index + 1) & 0xff);
+        }
+
+        @Override
+        protected short _getShortLE(int index) {
+            return (short) (_getByte(index) & 0xff | _getByte(index + 1) << 8);
+        }
+
+        @Override
+        protected int _getUnsignedMedium(int index) {
+            return (_getByte(index) & 0xff) << 16 | (_getShort(index + 1) & 0xffff);
+        }
+
+        @Override
+        protected int _getUnsignedMediumLE(int index) {
+            return _getShortLE(index) & 0xffff | (_getByte(index + 2) & 0xff) << 16;
+        }
+
+        @Override
+        protected int _getInt(int index) {
+            return _getShort(index) << 16 | _getShort(index + 2) & 0xffff;
+        }
+
+        @Override
+        protected int _getIntLE(int index) {
+            return _getShortLE(index) & 0xffff | _getShortLE(index + 2) << 16;
+        }
+
+        @Override
+        protected long _getLong(int index) {
+            return (long) _getInt(index) << 32 | _getInt(index + 4) & 0xffffffffL;
+        }
+
+        @Override
+        protected long _getLongLE(int index) {
+            return _getIntLE(index) & 0xffffffffL | (long) _getIntLE(index + 4) << 32;
+        }
+
+        @Override
+        public ByteBuf getBytes(int index, byte[] dst, int dstIndex, int length) {
+            checkDstIndex(index, length, dstIndex, dst.length);
+            while (length > 0) {
+                if (index < currentStart || index >= currentEnd) {
+                    select(index);
+                }
+                int n = Math.min(length, currentEnd - index);
+                if (currentAddress != 0) {
+                    PlatformDependent.copyMemory(currentAddress + index - currentStart, dst, dstIndex, n);
+                } else {
+                    current.position(index - currentStart);
+                    current.get(dst, dstIndex, n);
+                }
+                index += n;
+                dstIndex += n;
+                length -= n;
+            }
+            return this;
+        }
+
+        @Override
+        public ByteBuf getBytes(int index, ByteBuf dst, int dstIndex, int length) {
+            checkDstIndex(index, length, dstIndex, dst.capacity());
+            while (length > 0) {
+                ByteBuffer view = view(index, length);
+                int n = view.remaining();
+                dst.setBytes(dstIndex, view);
+                index += n;
+                dstIndex += n;
+                length -= n;
+            }
+            return this;
+        }
+
+        @Override
+        public ByteBuf getBytes(int index, ByteBuffer dst) {
+            int length = dst.remaining();
+            checkIndex(index, length);
+            while (length > 0) {
+                ByteBuffer view = view(index, length);
+                int n = view.remaining();
+                dst.put(view);
+                index += n;
+                length -= n;
+            }
+            return this;
+        }
+
+        @Override
+        public ByteBuf getBytes(int index, OutputStream out, int length) throws IOException {
+            byte[] bytes = new byte[length];
+            getBytes(index, bytes);
+            out.write(bytes);
+            return this;
+        }
+
+        @Override
+        public int getBytes(int index, GatheringByteChannel out, int length) throws IOException {
+            return (int) Math.min(out.write(nioBuffers(index, length)), Integer.MAX_VALUE);
+        }
+
+        @Override
+        public int getBytes(int index, FileChannel out, long position, int length) throws IOException {
+            int written = 0;
+            for (ByteBuffer view : nioBuffers(index, length)) {
+                written += out.write(view, position + written);
+            }
+            return written;
+        }
+
+        @Override
+        public ByteBuf copy(int index, int length) {
+            checkIndex(index, length);
+            return alloc().heapBuffer(length).writeBytes(this, index, length);
+        }
+
+        @Override
+        public int nioBufferCount() {
+            return segments.length;
+        }
+
+        @Override
+        public ByteBuffer nioBuffer(int index, int length) {
+            ByteBuffer[] views = nioBuffers(index, length);
+            if (views.length == 1) {
+                return views[0];
+            }
+            ByteBuffer merged = ByteBuffer.allocate(length);
+            for (ByteBuffer view : views) {
+                merged.put(view);
+            }
+            merged.flip();
+            return merged;
+        }
+
+        @Override
+        public ByteBuffer internalNioBuffer(int index, int length) {
+            ByteBuffer[] views = nioBuffers(index, length);
+            if (views.length != 1) {
+                throw new UnsupportedOperationException();
+            }
+            return views[0];
+        }
+
+        @Override
+        public ByteBuffer[] nioBuffers(int index, int length) {
+            checkIndex(index, length);
+            if (length == 0) {
+                return new ByteBuffer[] {ByteBuffer.allocate(0)};
+            }
+            java.util.List<ByteBuffer> views = new java.util.ArrayList<>();
+            while (length > 0) {
+                ByteBuffer view = view(index, length);
+                views.add(view.slice());
+                index += view.remaining();
+                length -= view.remaining();
+            }
+            return views.toArray(new ByteBuffer[0]);
+        }
+
+        @Override
+        public int capacity() {
+            return offsets[segments.length];
+        }
+
+        @Override
+        public ByteBuf capacity(int newCapacity) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        public boolean isReadOnly() {
+            return true;
+        }
+
+        @Override
+        public boolean isDirect() {
+            for (ByteBuffer segment : segments) {
+                if (!segment.isDirect()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public ByteBufAllocator alloc() {
+            return UnpooledByteBufAllocator.DEFAULT;
+        }
+
+        @Override
+        @SuppressWarnings("deprecation")
+        public ByteOrder order() {
+            return ByteOrder.BIG_ENDIAN;
+        }
+
+        @Override
+        public ByteBuf unwrap() {
+            return null;
+        }
+
+        @Override
+        public boolean hasArray() {
+            return false;
+        }
+
+        @Override
+        public byte[] array() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int arrayOffset() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean hasMemoryAddress() {
+            return false;
+        }
+
+        @Override
+        public long memoryAddress() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int refCnt() {
+            return 1;
+        }
+
+        @Override
+        public ByteBuf retain() {
+            return this;
+        }
+
+        @Override
+        public ByteBuf retain(int increment) {
+            return this;
+        }
+
+        @Override
+        public ByteBuf touch() {
+            return this;
+        }
+
+        @Override
+        public ByteBuf touch(Object hint) {
+            return this;
+        }
+
+        @Override
+        public boolean release() {
+            return false;
+        }
+
+        @Override
+        public boolean release(int decrement) {
+            return false;
+        }
+
+        @Override
+        protected void _setByte(int index, int value) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        protected void _setShort(int index, int value) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        protected void _setShortLE(int index, int value) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        protected void _setMedium(int index, int value) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        protected void _setMediumLE(int index, int value) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        protected void _setInt(int index, int value) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        protected void _setIntLE(int index, int value) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        protected void _setLong(int index, long value) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        protected void _setLongLE(int index, long value) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        public ByteBuf setBytes(int index, ByteBuf src, int srcIndex, int length) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        public ByteBuf setBytes(int index, byte[] src, int srcIndex, int length) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        public ByteBuf setBytes(int index, ByteBuffer src) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        public int setBytes(int index, InputStream in, int length) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        public int setBytes(int index, ScatteringByteChannel in, int length) {
+            throw new ReadOnlyBufferException();
+        }
+
+        @Override
+        public int setBytes(int index, FileChannel in, long position, int length) {
+            throw new ReadOnlyBufferException();
+        }
     }
 
     // ==================== JSON serialization helpers ====================

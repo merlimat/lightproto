@@ -30,16 +30,18 @@ final class GrpcPayloads {
         GrpcPayload p = new GrpcPayload();
         p.setName("payload-" + seed);
         p.setData(bytes(seed, dataSize));
-        p.setNested().setKey("nested-" + seed).setValue(bytes(seed + 1, 16));
+        // The versions range from one-byte to ten-byte varint64s
+        p.setNested().setKey("nested-" + seed).setValue(bytes(seed + 1, 16)).setVersion(seed);
         p.addTag("tag-" + seed);
         p.addTag("non-ascii-é→-" + seed);
         p.addChunk(bytes(seed + 2, 8));
         p.addChunk(bytes(seed + 3, 24));
-        p.addItem().setKey("first-" + seed).setValue(bytes(seed + 4, 4));
-        p.addItem().setKey("second-" + seed).setValue(bytes(seed + 5, 12));
+        p.addItem().setKey("first-" + seed).setValue(bytes(seed + 4, 4)).setVersion(-seed - 1L);
+        p.addItem().setKey("second-" + seed).setValue(bytes(seed + 5, 12)).setVersion((long) seed << 40);
         p.putLabels("label-" + seed, "value-" + seed);
         p.putBlobs("blob-" + seed, bytes(seed + 6, 10));
-        p.putIndex("index-" + seed).setKey("indexed-" + seed).setValue(bytes(seed + 7, 6));
+        p.putIndex("index-" + seed).setKey("indexed-" + seed).setValue(bytes(seed + 7, 6))
+                .setVersion(Long.MAX_VALUE - seed);
         return p;
     }
 
