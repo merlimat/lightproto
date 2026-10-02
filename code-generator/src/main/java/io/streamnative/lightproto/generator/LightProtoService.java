@@ -131,11 +131,23 @@ public class LightProtoService {
     }
 
     private void generateDrainableByteArrayInputStream(PrintWriter w) {
+        // Each thread reuses one array for its outbound messages: stream() takes the thread's
+        // array, and closing the stream hands it back. Over Netty, gRPC drains and closes the
+        // stream inside writeMessage(), on the sending thread, so steady-state sends allocate no
+        // array. Nothing is reference counted: a stream that is never closed only leaves its
+        // array to the garbage collector. Arrays above SPARE_ARRAY_MAX, gRPC's default maximum
+        // inbound message size, are not kept, so outlier messages don't pin larger allocations
+        // on every thread that sent one.
+        w.println("    private static final int SPARE_ARRAY_MAX = 4 * 1024 * 1024;");
+        w.println("    private static final ThreadLocal<byte[]> SPARE_ARRAY = new ThreadLocal<>();\n");
+
         w.println("    private static final class DrainableByteArrayInputStream");
         w.println("            extends java.io.ByteArrayInputStream");
         w.println("            implements io.grpc.Drainable, io.grpc.KnownLength {");
-        w.println("        DrainableByteArrayInputStream(byte[] buf, int offset, int length) {");
-        w.println("            super(buf, offset, length);");
+        w.println("        private static final byte[] CLOSED = new byte[0];");
+        w.println();
+        w.println("        DrainableByteArrayInputStream(byte[] buf, int length) {");
+        w.println("            super(buf, 0, length);");
         w.println("        }");
         w.println();
         w.println("        @Override");
@@ -147,6 +159,22 @@ public class LightProtoService {
         w.println("            }");
         w.println("            return count;");
         w.println("        }");
+        w.println();
+        // The array is reused only once its stream is closed, so a stream that outlives the
+        // next stream() call (in-process transport, or queued while the channel connects)
+        // keeps its bytes. A closed stream reads as empty.
+        w.println("        @Override");
+        w.println("        public void close() {");
+        w.println("            byte[] a = this.buf;");
+        w.println("            if (a.length == 0) {");
+        w.println("                return;");
+        w.println("            }");
+        w.println("            this.buf = CLOSED;");
+        w.println("            this.pos = this.count = this.mark = 0;");
+        w.println("            if (a.length <= SPARE_ARRAY_MAX) {");
+        w.println("                SPARE_ARRAY.set(a);");
+        w.println("            }");
+        w.println("        }");
         w.println("    }\n");
     }
 
@@ -157,9 +185,14 @@ public class LightProtoService {
         w.println("            @Override");
         w.println("            public java.io.InputStream stream(T value) {");
         w.println("                int size = value.getSerializedSize();");
-        w.println("                io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.buffer(size, size);");
-        w.println("                value.writeTo(buf);");
-        w.println("                return new DrainableByteArrayInputStream(buf.array(), 0, buf.readableBytes());");
+        w.println("                byte[] a = SPARE_ARRAY.get();");
+        w.println("                if (a != null && a.length >= size) {");
+        w.println("                    SPARE_ARRAY.set(null);");
+        w.println("                } else {");
+        w.println("                    a = new byte[size];");
+        w.println("                }");
+        w.println("                value._writeTo(a, 0);");
+        w.println("                return new DrainableByteArrayInputStream(a, size);");
         w.println("            }");
         w.println("            @Override");
         w.println("            public T parse(java.io.InputStream stream) {");

@@ -715,6 +715,7 @@ class LightProtoCodec {
     interface LightProtoMessage {
         int getSerializedSize();
         int writeTo(ByteBuf b);
+        int _writeTo(byte[] a, int i);
         void parseFrom(ByteBuf buffer, int size);
         void parseFrom(byte[] a);
         void materialize();

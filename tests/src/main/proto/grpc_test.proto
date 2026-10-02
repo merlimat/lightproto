@@ -9,6 +9,8 @@ message GrpcRequest {
     string name = 1;
     // A numeric value for the request.
     int32 value = 2;
+    // An opaque payload, used to exercise large messages.
+    bytes payload = 3;
 }
 
 // A response message from the test gRPC service.
@@ -17,6 +19,8 @@ message GrpcResponse {
     string message = 1;
     // The computed result value.
     int32 result = 2;
+    // An opaque payload, used to exercise large messages.
+    bytes payload = 3;
 }
 
 // A nested message carried by GrpcPayload.
