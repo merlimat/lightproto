@@ -154,6 +154,17 @@ public class NonCanonicalInputTest {
     }
 
     @Test
+    public void testNestedMessageChangedAfterParsing() {
+        // x { a: "a" }, then x.a set through getX(): M's wire size no longer applies
+        byte[] wire = bytes(0x0A, 0x03, 0x0A, 0x01, 'a');
+        assertReserializesLikeCopy(() -> {
+            M m = parse(new M(), wire);
+            m.getX().setA("a longer value than the parsed one");
+            return m;
+        }, M::new, M::copyFrom);
+    }
+
+    @Test
     public void testLengthPastSizeLimit() {
         // parseFrom(buffer, 2), where the first field runs 5 bytes past those 2
         byte[] wire = bytes(0x0A, 0x05, 'h', 'e', 'l', 'l', 'o');
