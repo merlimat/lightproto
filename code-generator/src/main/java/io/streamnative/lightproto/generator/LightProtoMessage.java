@@ -556,6 +556,25 @@ public class LightProtoMessage {
         w.format("            _cachedSize = _size | Integer.MIN_VALUE;\n");
         w.format("            return _size;\n");
         w.format("        }\n");
+
+        // _writeTo() writes the length prefix of each nested message through this method
+        // rather than getSerializedSize(). getSerializedSize() finds its cache empty when the
+        // size walk calls it and full when _writeTo() does, so C2 compiles the whole field walk
+        // into every parent _writeTo() that inlines it. Called only from _writeTo(), which runs
+        // after the size walk, this method always finds the size cached, so C2 turns the
+        // fallback into an uncommon trap.
+        w.println("        /**");
+        w.println("         * Internal: the serialized size, for a parent writing this message's length");
+        w.println("         * prefix. Every write computes the sizes of the whole tree first, so the size is");
+        w.println("         * normally cached; getSerializedSize() is the fallback. Public only so that");
+        w.println("         * generated messages in other packages can write nested fields of this type.");
+        w.println("         */");
+        w.format("        public int _sizeForWrite() {\n");
+        w.format("            if (_cachedSize < -1) {\n");
+        w.format("                return _cachedSize & Integer.MAX_VALUE;\n");
+        w.format("            }\n");
+        w.format("            return getSerializedSize();\n");
+        w.format("        }\n");
     }
 
     private void generateWriteJsonTo(PrintWriter w) {
